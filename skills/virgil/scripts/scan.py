@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Static pre-scanner for the security-engine skill (stdlib only)."""
+"""Static pre-scanner for the virgil skill (stdlib only)."""
 
 from __future__ import annotations
 
@@ -27,14 +27,14 @@ EXCLUDED_DIRS = {
 }
 
 SELF_SKILL_SEGMENTS = (
-    "skills/security-engine",
-    ".claude/skills/security-engine",
-    ".gemini/skills/security-engine",
-    ".gemini/config/skills/security-engine",
-    ".hermes/skills/security-engine",
-    ".codex/skills/security-engine",
-    ".cursor/skills/security-engine",
-    ".agents/skills/security-engine",
+    "skills/virgil",
+    ".claude/skills/virgil",
+    ".gemini/skills/virgil",
+    ".gemini/config/skills/virgil",
+    ".hermes/skills/virgil",
+    ".codex/skills/virgil",
+    ".cursor/skills/virgil",
+    ".agents/skills/virgil",
 )
 
 BINARY_EXTS = {
@@ -710,7 +710,7 @@ def render_markdown(repo_name: str, files_scanned: int, findings: list[Finding])
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Deterministic static pre-scanner for security-engine.")
+    parser = argparse.ArgumentParser(description="Deterministic static pre-scanner for virgil.")
     parser.add_argument("target", nargs="?", default=".", help="Target repository directory")
     parser.add_argument("--format", choices=["markdown", "json"], default="markdown")
     parser.add_argument("--exit-code", action="store_true", help="Exit 2 on Red, 1 on Yellow only, 0 on clean")

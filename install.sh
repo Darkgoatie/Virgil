@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SKILL_NAME="security-engine"
+SKILL_NAME="virgil"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_DIR="$SCRIPT_DIR/skills/$SKILL_NAME"
 
@@ -31,7 +31,7 @@ Options:
   --target <dir>     Target project directory when --scope project (default: cwd)
   --link             Symlink skill directory instead of copying
   --dry-run          Print planned changes without writing files
-  --uninstall        Remove installed security-engine skill for selected targets
+  --uninstall        Remove installed virgil skill for selected targets
   -h, --help         Show this help text
 EOF
 }

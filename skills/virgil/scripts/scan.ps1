@@ -19,14 +19,14 @@ $ExcludedDirs = [System.Collections.Generic.HashSet[string]]::new([System.String
 ) | ForEach-Object { [void]$ExcludedDirs.Add($_) }
 
 $SelfSkillSegments = @(
-    "skills/security-engine",
-    ".claude/skills/security-engine",
-    ".gemini/skills/security-engine",
-    ".gemini/config/skills/security-engine",
-    ".hermes/skills/security-engine",
-    ".codex/skills/security-engine",
-    ".cursor/skills/security-engine",
-    ".agents/skills/security-engine"
+    "skills/virgil",
+    ".claude/skills/virgil",
+    ".gemini/skills/virgil",
+    ".gemini/config/skills/virgil",
+    ".hermes/skills/virgil",
+    ".codex/skills/virgil",
+    ".cursor/skills/virgil",
+    ".agents/skills/virgil"
 )
 
 $BinaryExts = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)

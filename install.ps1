@@ -15,7 +15,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$SkillName = "security-engine"
+$SkillName = "virgil"
 $RepoRoot = $PSScriptRoot
 $SourceDir = Join-Path $RepoRoot "skills\$SkillName"
 $SourceSkillMd = Join-Path $SourceDir "SKILL.md"

@@ -1,13 +1,13 @@
 ---
-name: security-engine
+name: virgil
 description: Use when auditing a repository for vulnerabilities, reviewing code or configs for security flaws, hardening websites, APIs, secrets, databases, CI/CD, containers, or AI agents, or verifying a project before deployment.
 ---
 
-# Security Engine
+# Virgil
 
 ## Overview and Modes
 
-Security Engine is a fail-closed repository security auditor and hardening baseline grounded in OWASP Top 10:2025, ASVS v5.0, OWASP API Top 10, NIST SP 800-series, SLSA, CIS Benchmarks, MITRE CWE/ATLAS, and MCP security specifications.
+Virgil is a fail-closed repository security auditor and hardening baseline grounded in OWASP Top 10:2025, ASVS v5.0, OWASP API Top 10, NIST SP 800-series, SLSA, CIS Benchmarks, MITRE CWE/ATLAS, and MCP security specifications.
 
 - **Audit Mode (default on repo reviews, checks, or security audits):** Map the attack surface, execute the deterministic pre-scanner, read only relevant domain references, inspect code semantically across trust boundaries, and emit the exact `[RED]` / `[YELLOW]` vulnerability report.
 - **Hardening / Build Mode (when writing or modifying code/configs):** Enforce every `[RED]` rule as a hard block before writing code, load the matching `references/*.md` files, and verify fixes with real test or scanner output before claiming completion.
