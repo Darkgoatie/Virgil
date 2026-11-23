@@ -142,6 +142,14 @@ $SchemaCodeExts = [System.Collections.Generic.HashSet[string]]::new($CodeRegexEx
 $ReHostResetCtx = [regex]::new('(?:reset|forgot|magic|verify|invite)', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
 $ReHostHeader = [regex]::new('(?:req\.headers?(?:\.\s*|\[\s*[''"]?|\(\s*[''"]?)(?:x-forwarded-host|host)|request\.headers?(?:\.get\(\s*[''"]?|\[\s*[''"]?|\.)(?:x-forwarded-host|host)|req\.get\(\s*[''"]?(?:x-forwarded-host|host)|request\.host\b|getHeader\(\s*[''"]?(?:x-forwarded-host|host))', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
 $ReKbaQuestion = [regex]::new('\b(?:security_?[q]uestion|security[Q]uestion|mother_?[m]aiden|first_?[p]et)\b', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+$PropYamlExts = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+@('.properties', '.yml', '.yaml') | ForEach-Object { [void]$PropYamlExts.Add($_) }
+$PipCfgExts = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+@('.txt', '.cfg', '.conf', '.ini', '.yml', '.yaml', '.sh', '.ps1') | ForEach-Object { [void]$PipCfgExts.Add($_) }
+$ReTrustProxyTrue = [regex]::new('(?:app\.set\s*\(\s*[''"]trust\s+proxy[''"]\s*,\s*true\s*\)|\btrustProxy\s*:\s*true\b)')
+$ReActuatorExposed = [regex]::new('management\.endpoints\.web\.exposure\.include\s*[:=]\s*[''"]?(?:\*|[^#\r\n]*\b(?:heapdump|env|mappings)\b)', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+$RePipExtraIndex = [regex]::new('--extra-[i]ndex-url(?:\s+|=)\S+', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+$RePostMessageWildcard = [regex]::new('\.postMessage\s*\([^,\r\n]+,\s*[''"]\*[''"]\s*\)')
 
 function Mask-Token {
     param([string]$Token)
@@ -409,6 +417,18 @@ function Invoke-ScanFile {
         }
         if ($SchemaCodeExts.Contains($ext) -and $ReKbaQuestion.IsMatch($line)) {
             Add-Finding $Findings $Seen "YELLOW" "SEC-YEL-012" "Deprecated static knowledge-based authentication (KBA / security question) recovery pattern" "NIST SP 800-63B-4 / OWASP Forgot Password" $RelPosix $idx $line
+        }
+        if ($JsTsExts.Contains($ext) -and $ReTrustProxyTrue.IsMatch($line)) {
+            Add-Finding $Findings $Seen "RED" "SEC-RED-017" "Overly permissive trust proxy setting allows X-Forwarded-For IP spoofing" "OWASP API4 / CWE-290" $RelPosix $idx $line
+        }
+        if ($PropYamlExts.Contains($ext) -and $ReActuatorExposed.IsMatch($line)) {
+            Add-Finding $Findings $Seen "RED" "SEC-RED-018" "Sensitive Spring Boot Actuator endpoints exposed over web" "OWASP A02:2025 / CWE-200" $RelPosix $idx $line
+        }
+        if (($PipCfgExts.Contains($ext) -or $lowName.StartsWith("dockerfile")) -and $RePipExtraIndex.IsMatch($line)) {
+            Add-Finding $Findings $Seen "RED" "SEC-RED-019" "pip --extra-index-url enables public PyPI dependency confusion against private packages" "OWASP A03:2025 / CWE-427" $RelPosix $idx $line
+        }
+        if ($JsTsExts.Contains($ext) -and $RePostMessageWildcard.IsMatch($line)) {
+            Add-Finding $Findings $Seen "YELLOW" "SEC-YEL-013" "window.postMessage called with wildcard '*' targetOrigin" "OWASP Client-Side / CWE-346" $RelPosix $idx $line
         }
         if ($ReWeakCrypto.IsMatch($line)) {
             Add-Finding $Findings $Seen "YELLOW" "SEC-YEL-003" "Deprecated or weak cryptographic primitive" "OWASP A04:2025 / CWE-327 / CWE-328" $RelPosix $idx $line

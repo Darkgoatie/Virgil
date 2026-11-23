@@ -193,6 +193,17 @@ RE_KBA_QUESTION = re.compile(
     r"\b(?:security_?[q]uestion|security[Q]uestion|mother_?[m]aiden|first_?[p]et)\b",
     re.IGNORECASE,
 )
+PROP_YAML_EXTS = {".properties", ".yml", ".yaml"}
+PIP_CFG_EXTS = {".txt", ".cfg", ".conf", ".ini", ".yml", ".yaml", ".sh", ".ps1"}
+RE_TRUST_PROXY_TRUE = re.compile(
+    r"(?:app\.set\s*\(\s*['\"]trust\s+proxy['\"]\s*,\s*true\s*\)|\btrustProxy\s*:\s*true\b)"
+)
+RE_ACTUATOR_EXPOSED = re.compile(
+    r"management\.endpoints\.web\.exposure\.include\s*[:=]\s*['\"]?(?:\*|[^#\r\n]*\b(?:heapdump|env|mappings)\b)",
+    re.IGNORECASE,
+)
+RE_PIP_EXTRA_INDEX = re.compile(r"--extra-[i]ndex-url(?:\s+|=)\S+", re.IGNORECASE)
+RE_POSTMESSAGE_WILDCARD = re.compile(r"\.postMessage\s*\([^,\r\n]+,\s*['\"]\*['\"]\s*\)")
 
 
 @dataclass
@@ -713,6 +724,58 @@ def scan_file(
                 "SEC-YEL-012",
                 "Deprecated static knowledge-based authentication (KBA / security question) recovery pattern",
                 "NIST SP 800-63B-4 / OWASP Forgot Password",
+                rel_posix,
+                idx,
+                line,
+            )
+
+        if ext in JS_TS_EXTS and RE_TRUST_PROXY_TRUE.search(line):
+            add_finding(
+                findings,
+                seen,
+                "RED",
+                "SEC-RED-017",
+                "Overly permissive trust proxy setting allows X-Forwarded-For IP spoofing",
+                "OWASP API4 / CWE-290",
+                rel_posix,
+                idx,
+                line,
+            )
+
+        if ext in PROP_YAML_EXTS and RE_ACTUATOR_EXPOSED.search(line):
+            add_finding(
+                findings,
+                seen,
+                "RED",
+                "SEC-RED-018",
+                "Sensitive Spring Boot Actuator endpoints exposed over web",
+                "OWASP A02:2025 / CWE-200",
+                rel_posix,
+                idx,
+                line,
+            )
+
+        if (ext in PIP_CFG_EXTS or name.lower().startswith("dockerfile")) and RE_PIP_EXTRA_INDEX.search(line):
+            add_finding(
+                findings,
+                seen,
+                "RED",
+                "SEC-RED-019",
+                "pip --extra-index-url enables public PyPI dependency confusion against private packages",
+                "OWASP A03:2025 / CWE-427",
+                rel_posix,
+                idx,
+                line,
+            )
+
+        if ext in JS_TS_EXTS and RE_POSTMESSAGE_WILDCARD.search(line):
+            add_finding(
+                findings,
+                seen,
+                "YELLOW",
+                "SEC-YEL-013",
+                "window.postMessage called with wildcard '*' targetOrigin",
+                "OWASP Client-Side / CWE-346",
                 rel_posix,
                 idx,
                 line,
