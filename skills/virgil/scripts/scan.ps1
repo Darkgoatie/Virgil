@@ -137,6 +137,11 @@ $ReExtractAll = [regex]::new('\.extractall\s*\(')
 $ReUnsafeXmlPy = [regex]::new('\b(?:xml\.etree\.ElementTree|xml\.dom\.minidom|xml\.sax)\.(?:parse|fromstring|parseString)\s*\(')
 $ReUseServer = [regex]::new('^\s*[''"]use server[''"]\s*;?\s*$')
 $ReAuthHint = [regex]::new('\b(?:auth|session|getUser|verifySession|currentUser|cookies|requireAuth|getServerSession)\b', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+$SchemaCodeExts = [System.Collections.Generic.HashSet[string]]::new($CodeRegexExts, [System.StringComparer]::OrdinalIgnoreCase)
+@('.sql', '.prisma') | ForEach-Object { [void]$SchemaCodeExts.Add($_) }
+$ReHostResetCtx = [regex]::new('(?:reset|forgot|magic|verify|invite)', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+$ReHostHeader = [regex]::new('(?:req\.headers?(?:\.\s*|\[\s*[''"]?|\(\s*[''"]?)(?:x-forwarded-host|host)|request\.headers?(?:\.get\(\s*[''"]?|\[\s*[''"]?|\.)(?:x-forwarded-host|host)|req\.get\(\s*[''"]?(?:x-forwarded-host|host)|request\.host\b|getHeader\(\s*[''"]?(?:x-forwarded-host|host))', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+$ReKbaQuestion = [regex]::new('\b(?:security_?[q]uestion|security[Q]uestion|mother_?[m]aiden|first_?[p]et)\b', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
 
 function Mask-Token {
     param([string]$Token)
@@ -398,6 +403,12 @@ function Invoke-ScanFile {
         }
         if ($ext -eq ".py" -and $ReUnsafeXmlPy.IsMatch($line) -and -not $fileUsesDefusedXml) {
             Add-Finding $Findings $Seen "RED" "SEC-RED-015" "Unsafe Python XML parser susceptible to XXE / entity expansion" "OWASP XXE / CWE-611" $RelPosix $idx $line
+        }
+        if ($CodeRegexExts.Contains($ext) -and $ReHostResetCtx.IsMatch($line) -and $ReHostHeader.IsMatch($line)) {
+            Add-Finding $Findings $Seen "RED" "SEC-RED-016" "Password-reset, verification, or invite URL built from untrusted Host / X-Forwarded-Host header" "OWASP Forgot Password / CWE-640" $RelPosix $idx $line
+        }
+        if ($SchemaCodeExts.Contains($ext) -and $ReKbaQuestion.IsMatch($line)) {
+            Add-Finding $Findings $Seen "YELLOW" "SEC-YEL-012" "Deprecated static knowledge-based authentication (KBA / security question) recovery pattern" "NIST SP 800-63B-4 / OWASP Forgot Password" $RelPosix $idx $line
         }
         if ($ReWeakCrypto.IsMatch($line)) {
             Add-Finding $Findings $Seen "YELLOW" "SEC-YEL-003" "Deprecated or weak cryptographic primitive" "OWASP A04:2025 / CWE-327 / CWE-328" $RelPosix $idx $line

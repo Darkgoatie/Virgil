@@ -183,6 +183,16 @@ RE_AUTH_HINT = re.compile(
     r"\b(?:auth|session|getUser|verifySession|currentUser|cookies|requireAuth|getServerSession)\b",
     re.IGNORECASE,
 )
+SCHEMA_CODE_EXTS = CODE_REGEX_EXTS | {".sql", ".prisma"}
+RE_HOST_RESET_CTX = re.compile(r"(?:reset|forgot|magic|verify|invite)", re.IGNORECASE)
+RE_HOST_HEADER = re.compile(
+    r"(?:req\.headers?(?:\.\s*|\[\s*['\"]?|\(\s*['\"]?)(?:x-forwarded-host|host)|request\.headers?(?:\.get\(\s*['\"]?|\[\s*['\"]?|\.)(?:x-forwarded-host|host)|req\.get\(\s*['\"]?(?:x-forwarded-host|host)|request\.host\b|getHeader\(\s*['\"]?(?:x-forwarded-host|host))",
+    re.IGNORECASE,
+)
+RE_KBA_QUESTION = re.compile(
+    r"\b(?:security_?[q]uestion|security[Q]uestion|mother_?[m]aiden|first_?[p]et)\b",
+    re.IGNORECASE,
+)
 
 
 @dataclass
@@ -677,6 +687,32 @@ def scan_file(
                 "SEC-RED-015",
                 "Unsafe Python XML parser susceptible to XXE / entity expansion",
                 "OWASP XXE / CWE-611",
+                rel_posix,
+                idx,
+                line,
+            )
+
+        if ext in CODE_REGEX_EXTS and RE_HOST_RESET_CTX.search(line) and RE_HOST_HEADER.search(line):
+            add_finding(
+                findings,
+                seen,
+                "RED",
+                "SEC-RED-016",
+                "Password-reset, verification, or invite URL built from untrusted Host / X-Forwarded-Host header",
+                "OWASP Forgot Password / CWE-640",
+                rel_posix,
+                idx,
+                line,
+            )
+
+        if ext in SCHEMA_CODE_EXTS and RE_KBA_QUESTION.search(line):
+            add_finding(
+                findings,
+                seen,
+                "YELLOW",
+                "SEC-YEL-012",
+                "Deprecated static knowledge-based authentication (KBA / security question) recovery pattern",
+                "NIST SP 800-63B-4 / OWASP Forgot Password",
                 rel_posix,
                 idx,
                 line,
