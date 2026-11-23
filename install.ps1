@@ -24,6 +24,12 @@ if (-not (Test-Path -LiteralPath $SourceSkillMd -PathType Leaf)) {
     throw "Source skill not found at: $SourceSkillMd"
 }
 
+$SourceCommit = ""
+if (Get-Command git -ErrorAction SilentlyContinue) {
+    $sha = & git -C $RepoRoot rev-parse HEAD 2>$null
+    if ($LASTEXITCODE -eq 0 -and $sha) { $SourceCommit = "$sha".Trim() }
+}
+
 $ValidAgents = @("claude", "gemini", "antigravity", "hermes", "codex", "cursor", "agents")
 $HomeDir = [Environment]::GetFolderPath("UserProfile")
 
@@ -209,5 +215,8 @@ foreach ($t in $Targets) {
     }
 
     Copy-Item -LiteralPath $SourceDir -Destination $dest -Recurse -Force
+    if ($SourceCommit) {
+        Set-Content -LiteralPath (Join-Path $dest ".installed-commit") -Value $SourceCommit -NoNewline
+    }
     Write-Output "[copied]  ($($t.agent)) $dest"
 }

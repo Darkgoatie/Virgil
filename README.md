@@ -98,6 +98,27 @@ With `--exit-code` (`-ExitCode`), the scanner exits `2` when `[RED]` findings ex
 
 ---
 
+## Checking for Updates
+
+The skill checks `Darkgoatie/Virgil` on GitHub at the start of each audit. The check is read-only, times out after 4 seconds, never downloads or runs remote code, and never blocks an offline audit. Run it manually:
+
+```bash
+python3 skills/virgil/scripts/check_update.py
+pwsh -NoProfile -File skills/virgil/scripts/check_update.ps1 -Format json
+```
+
+Copy installs record the source commit in `.installed-commit`. To upgrade, pull the clone and reinstall:
+
+```bash
+git pull && ./install.sh --agent all
+```
+
+```powershell
+git pull; .\install.ps1 -Agent all
+```
+
+---
+
 ## Skill Structure
 
 ```text
@@ -117,7 +138,9 @@ Virgil/
         │   └── ai-agent-mcp.md           # LLM/Agentic Top 10, CaMeL, MCP auth, sandboxing
         └── scripts/
             ├── scan.py                   # Stdlib Python static pre-scanner
-            └── scan.ps1                  # Native PowerShell static pre-scanner
+            ├── scan.ps1                  # Native PowerShell static pre-scanner
+            ├── check_update.py           # Read-only GitHub update check
+            └── check_update.ps1          # Read-only GitHub update check (PowerShell)
 ```
 
 ---

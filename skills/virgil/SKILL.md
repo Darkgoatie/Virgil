@@ -34,6 +34,16 @@ Virgil is a fail-closed repository security auditor and hardening baseline groun
 
 ## Audit Procedure (Execute in Order)
 
+### Step 0: Check for Skill Updates (Non-Blocking)
+Run the read-only update check against `Darkgoatie/Virgil` on GitHub. It never downloads or executes remote code and always exits `0`, so offline audits are not blocked:
+
+```bash
+python3 scripts/check_update.py
+pwsh -NoProfile -File scripts/check_update.ps1
+```
+
+If the output starts with `[UPDATE AVAILABLE]`, add one `Update notice` bullet to the report `Summary` with the printed upgrade command. Never update the skill yourself during an audit.
+
 ### Step 1: Map the Attack Surface
 Inventory frameworks, entrypoints/routes, frontend public folders and compiled build outputs (`dist/`, `.next/`, `build/`, `out/`), auth/session modules, DB/ORM/cache/bucket configs, Docker/K8s/Terraform manifests, `.github/workflows/`, and LLM/MCP tool integrations.
 
@@ -81,6 +91,7 @@ Output your findings using the exact structure below. Never print raw unredacted
 - **Scope inspected:** <directories, stacks, build outputs reviewed>
 - **Checks executed:** <exact scanner/CLI commands run and exit results, or manual-only note>
 - **Counts:** <N> Red, <M> Yellow
+- **Update notice:** <only when check_update reports [UPDATE AVAILABLE]; otherwise omit>
 
 ## Red Vulnerabilities
 1. **[RED] `<RULE-ID>` — <Short Vulnerability Title>**

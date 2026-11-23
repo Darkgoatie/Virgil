@@ -10,6 +10,8 @@ if [[ ! -f "$SOURCE_DIR/SKILL.md" ]]; then
   exit 1
 fi
 
+SOURCE_COMMIT="$(git -C "$SCRIPT_DIR" rev-parse HEAD 2>/dev/null || true)"
+
 AGENTS_INPUT=()
 SCOPE="global"
 TARGET_REPO="$(pwd)"
@@ -238,6 +240,9 @@ for i in "${!DEDUP_PATHS[@]}"; do
     echo "[linked]  ($label) $dest -> $SOURCE_DIR"
   else
     cp -R "$SOURCE_DIR" "$dest"
+    if [[ -n "$SOURCE_COMMIT" ]]; then
+      printf '%s' "$SOURCE_COMMIT" > "$dest/.installed-commit"
+    fi
     echo "[copied]  ($label) $dest"
   fi
 done
