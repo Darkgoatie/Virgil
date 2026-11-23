@@ -129,13 +129,16 @@ Virgil/
 └── skills/
     └── virgil/
         ├── SKILL.md                      # Core severity rubric, workflow, report contract
+        ├── VERSION                       # Skill semantic version
         ├── references/
-        │   ├── web-browser.md            # Web, frontend bundles, headers, cookies, Electron
+        │   ├── web-browser.md            # Web, bundles, headers, cookies, DNS/email/SRI
         │   ├── api-auth.md               # OWASP API Top 10, OAuth 2.1, JWT, webhooks, RBAC
-        │   ├── secrets-crypto.md         # Secrets lifecycle, client-key rules, crypto, logs
+        │   ├── secrets-crypto.md         # Secrets lifecycle, client-key rules, crypto, privacy
         │   ├── db-storage.md             # SQL/NoSQL injection, RLS, Redis, S3/GCS/R2/Blob
-        │   ├── infra-cicd-supply.md      # Docker, K8s, IMDSv2, GitHub Actions, SLSA, SecOps
-        │   └── ai-agent-mcp.md           # LLM/Agentic Top 10, CaMeL, MCP auth, sandboxing
+        │   ├── infra-cicd-supply.md      # Docker, K8s, multi-account cloud, CI/CD, memory/fuzz
+        │   ├── ai-agent-mcp.md           # LLM/Agentic Top 10, CaMeL, MCP auth, sandboxing
+        │   ├── mobile-apps.md            # iOS ATS/Keychain/Enclave, Android, OWASP MASVS
+        │   └── payments-business-logic.md # Stripe/PCI v4.0, race conditions, state machines
         └── scripts/
             ├── scan.py                   # Stdlib Python static pre-scanner
             ├── scan.ps1                  # Native PowerShell static pre-scanner

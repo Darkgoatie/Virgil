@@ -25,8 +25,9 @@
 - `[RED]` **Timing Side-Channels (`CWE-208`) & Broken Signatures:** Compare MACs, webhook signatures, and API tokens strictly with constant-time functions (`crypto.timingSafeEqual`, `hmac.compare_digest`, `subtle.ConstantTimeCompare`). Use **`Ed25519`**, **`ECDSA` P-256** (deterministic RFC 6979), or **`RSA`** (>=2048–3072 bits) with **`RSASSA-PSS`** and **`RSAES-OAEP`**.
 - `[RED]` / `[YELLOW]` **TLS & KMS Envelope Separation:** Disable SSLv2/v3 and TLS 1.0/1.1 (`[RED]`); default to **TLS 1.3** and restrict TLS 1.2 strictly to **ECDHE + AEAD** per NIST SP 800-52 Rev. 2 (`[YELLOW]`). Separate **DEK** and KMS/HSM **KEK** with explicit encryption context; KEK rotation re-wraps DEKs without resetting DEK cryptoperiods.
 
-## 5. Safe Observability, Errors & Data Sanitization
+## 5. Safe Observability, Errors, Privacy & Data Sanitization
 - `[YELLOW]` **Log & Error Leakage (`CWE-532`, `CWE-209`):** Emit structured JSON logs scrubbed at centralized middleware/serializers to drop `Authorization`, cookies, session IDs, passwords, keys, and PII (including inside exception objects). Return generic **RFC 7807** Problem Details with opaque correlation IDs; keep `DEBUG=false` and traces strictly server-side.
+- `[YELLOW]` **Privacy Engineering & Data Lifecycle (Microsoft SDL Privacy / Google):** Enforce data minimization, explicit consent/purpose binding, automated retention TTLs, and end-to-end DSR (Data Subject Request) export/erasure propagation across primary DBs, caches, backups, logs, and vector/RAG indices.
 - `[YELLOW]` **Data Sanitization (NIST SP 800-88 Rev. 2):** Encrypt backups/snapshots with separated KMS keys and align decommissioning with **Purge** (Block Erase / Cryptographic Erase with zero unencrypted copies and full key destruction) or **Destroy**.
 
 ## Verification Checklist

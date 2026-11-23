@@ -149,6 +149,23 @@ RE_CSP_HEADER = re.compile(r"(?:Content-Security-Policy|script-src|default-src)"
 RE_CORS_ORIGIN_ANY = re.compile(r"(?:origin\s*:\s*(?:true|['\"]\*['\"])|allow_origins\s*=\s*\[\s*['\"]\*['\"]\s*\])")
 RE_CORS_CREDS = re.compile(r"(?:credentials\s*:\s*true|allow_credentials\s*=\s*True)")
 
+RE_IOS_ATS_KEY = re.compile(r"NSAllowsArbitraryLoads")
+RE_IOS_ATS_TRUE = re.compile(r"(?:<true\s*/?>|[:=]\s*true\b)", re.IGNORECASE)
+RE_ANDROID_CLEARTEXT = re.compile(r"(?:cleartextTrafficPermitted|android:usesCleartextTraffic)\s*=\s*['\"]true['\"]")
+RE_ANDROID_EXPORTED = re.compile(r"android:exported\s*=\s*['\"]true['\"]")
+RE_CF_FLEXIBLE = re.compile(r"(?:ssl_mode\s*[:=]\s*['\"]?flexible['\"]?|\"ssl\"\s*:\s*\"flexible\")", re.IGNORECASE)
+RE_PAN_LOG = re.compile(
+    r"(?:logger\.\w+|console\.log|print)\s*\([^)]*(?:card_?number|cardNumber|\bcvv\b|\bcvc\b)",
+    re.IGNORECASE,
+)
+RE_EXT_SCRIPT = re.compile(r"<script\b[^>]*\bsrc\s*=\s*['\"]https?://[^'\"]+['\"][^>]*>", re.IGNORECASE)
+RE_MOBILE_HYGIENE = re.compile(r"(?:android:allowBackup\s*=\s*['\"]true['\"]|\bkSecAttrAccessibleAlways(?:ThisDeviceOnly)?\b)")
+RE_RUST_UNSAFE = re.compile(r"\bunsafe\s*\{")
+RE_REDOS = re.compile(r"(?:new\s+RegExp|re\.compile)\s*\([^)]*\([^)]*[+*][^)]*\)[+*]")
+
+HTML_EXTS = {".html", ".htm", ".ejs", ".hbs", ".jinja", ".j2", ".twig", ".vue", ".svelte", ".astro"}
+CODE_REGEX_EXTS = {".js", ".ts", ".jsx", ".tsx", ".mjs", ".cjs", ".py", ".rb", ".php", ".java", ".cs", ".go"}
+
 
 @dataclass
 class Finding:
@@ -457,6 +474,120 @@ def scan_file(
                 "SEC-RED-011",
                 "MongoDB server-side JavaScript enabled or $where operator used",
                 "OWASP A05:2025 / CWE-943",
+                rel_posix,
+                idx,
+                line,
+            )
+
+        ats_window = "\n".join(lines[max(0, idx - 1) : min(len(lines), idx + 2)])
+        if RE_IOS_ATS_KEY.search(line) and RE_IOS_ATS_TRUE.search(ats_window):
+            add_finding(
+                findings,
+                seen,
+                "RED",
+                "SEC-RED-012",
+                "iOS App Transport Security disabled (NSAllowsArbitraryLoads)",
+                "Apple Platform Security / OWASP MASVS-NETWORK",
+                rel_posix,
+                idx,
+                line,
+            )
+
+        if RE_ANDROID_CLEARTEXT.search(line):
+            add_finding(
+                findings,
+                seen,
+                "RED",
+                "SEC-RED-012",
+                "Android cleartext network traffic permitted",
+                "OWASP MASVS-NETWORK / CWE-319",
+                rel_posix,
+                idx,
+                line,
+            )
+
+        if low_name == "androidmanifest.xml" and RE_ANDROID_EXPORTED.search(line):
+            manifest_win = "\n".join(lines[max(0, idx - 3) : min(len(lines), idx + 6)])
+            if "android:permission" not in manifest_win and "android.intent.action.MAIN" not in manifest_win:
+                add_finding(
+                    findings,
+                    seen,
+                    "RED",
+                    "SEC-RED-012",
+                    "Android component exported without permission guard",
+                    "OWASP MASVS-PLATFORM / CWE-926",
+                    rel_posix,
+                    idx,
+                    line,
+                )
+
+        if RE_CF_FLEXIBLE.search(line) or RE_PAN_LOG.search(line):
+            title = (
+                "Cloudflare Flexible TLS leaves origin hop unencrypted"
+                if RE_CF_FLEXIBLE.search(line)
+                else "Raw payment card PAN or CVV logged"
+            )
+            add_finding(
+                findings,
+                seen,
+                "RED",
+                "SEC-RED-013",
+                title,
+                "PCI-DSS v4.0 / CWE-319 / CWE-532",
+                rel_posix,
+                idx,
+                line,
+            )
+
+        if ext in HTML_EXTS and RE_EXT_SCRIPT.search(line) and "integrity=" not in line.lower():
+            add_finding(
+                findings,
+                seen,
+                "YELLOW",
+                "SEC-YEL-008",
+                "External script tag missing Subresource Integrity (integrity=)",
+                "PCI-DSS v4.0 / OWASP ASVS V3 / CWE-353",
+                rel_posix,
+                idx,
+                line,
+            )
+
+        if RE_MOBILE_HYGIENE.search(line):
+            add_finding(
+                findings,
+                seen,
+                "YELLOW",
+                "SEC-YEL-009",
+                "Insecure mobile backup or deprecated Keychain accessibility",
+                "Apple Platform Security / OWASP MASVS-STORAGE",
+                rel_posix,
+                idx,
+                line,
+            )
+
+        if ext == ".rs" and RE_RUST_UNSAFE.search(line):
+            prev_line = lines[idx - 2] if idx >= 2 else ""
+            if "SAFETY:" not in line and "SAFETY:" not in prev_line:
+                add_finding(
+                    findings,
+                    seen,
+                    "YELLOW",
+                    "SEC-YEL-010",
+                    "Rust unsafe block missing // SAFETY: invariant comment",
+                    "Google Safe Coding / CWE-119",
+                    rel_posix,
+                    idx,
+                    line,
+                )
+
+        if ext in CODE_REGEX_EXTS and RE_REDOS.search(line):
+            add_finding(
+                findings,
+                seen,
+                "YELLOW",
+                "SEC-YEL-010",
+                "Potential catastrophic ReDoS nested quantifier regex",
+                "OWASP DoS / CWE-1333",
                 rel_posix,
                 idx,
                 line,

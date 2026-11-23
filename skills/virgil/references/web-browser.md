@@ -44,9 +44,15 @@
 - `[RED]` **Insecure Electron / Desktop Webviews:** Explicitly enforce `nodeIntegration: false`, `contextIsolation: true`, `sandbox: true`, and `webSecurity: true`. Never expose raw `ipcRenderer` via `contextBridge`; validate IPC senders/arguments in Main, block `will-navigate`/`setWindowOpenHandler`, and allowlist `https://` in `shell.openExternal()`.
 - `[RED]` / `[YELLOW]` **TLS & Reverse Proxy Edge:** Reject TLS 1.0/1.1 (`[RED]`); enforce TLS 1.3 and AEAD-only TLS 1.2 (`[YELLOW]` if weak TLS 1.2 suites remain), terminate TLS at proxy/WAF with HTTP->HTTPS `301`, Slowloris timeouts, and TLS/mTLS re-encryption to private origin backends.
 
+## 8. DNS, Domain, Email & Edge Protection (Cloudflare / Google / Microsoft)
+- `[RED]` **Cloudflare `Flexible` TLS & Dangling DNS / Subdomain Takeover:** Never run reverse-proxy/CDN edge TLS in `Flexible` mode (leaves edge-to-origin plaintext); enforce **`Full (Strict)`** with verified origin certificates. Audit and remove orphaned `CNAME`/`A` records pointing to decommissioned cloud services (S3, Heroku, GitHub Pages, Azure) to prevent subdomain takeover (`CWE-350`).
+- `[YELLOW]` **Subresource Integrity (SRI) on Third-Party Scripts:** Require cryptographic `integrity="sha384-..."` and `crossorigin="anonymous"` on all external CDN `<script>`/`<link>` tags (mandatory on auth and payment pages under PCI-DSS v4.0).
+- `[YELLOW]` **Email Auth (SPF, DKIM, DMARC), DNSSEC & CAA:** Configure **SPF** (staying within 10 DNS lookups), **DKIM** cryptographic signing, and enforced **DMARC (`p=reject`)** on domains sending transactional mail to prevent spoofing/BEC. Enable **DNSSEC** (registrar DS record) and **CAA** records restricting which CAs may issue certificates for your domain, alongside edge DDoS and Bot Management on auth/checkout routes.
+
 ## Verification Checklist
 - Run `scan.py`/`scan.ps1` across both source and compiled frontend bundles (`dist/`, `.next/`, `build/`).
 - Probe CORS (`Origin: https://evil.example`, `Origin: null`), headers (`curl -I`), `Set-Cookie` flags, `169.254.169.254` SSRF/redirect payloads, `../` paths, and Electron `BrowserWindow` flags.
+- Verify DNS/email posture (`SPF`, `DKIM`, `DMARC p=reject`, `DNSSEC`, `CAA`), absence of dangling CNAMEs, `Full (Strict)` edge TLS, and `integrity=` attributes on external `<script>` tags.
 
 ## Authoritative Sources
 - [OWASP Top 10:2025](https://top10.owasp.org/2025/) | [OWASP ASVS 5.0](https://asvs.owasp.org/)

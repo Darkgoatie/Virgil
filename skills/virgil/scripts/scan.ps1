@@ -103,6 +103,23 @@ $ReCspHeader = [regex]::new('(?:Content-Security-Policy|script-src|default-src)'
 $ReCorsOriginAny = [regex]::new('(?:origin\s*:\s*(?:true|[''"]\*[''"])|allow_origins\s*=\s*\[\s*[''"]\*[''"]\s*\])')
 $ReCorsCreds = [regex]::new('(?:credentials\s*:\s*true|allow_credentials\s*=\s*True)')
 
+$ReIosAtsKey = [regex]::new('NSAllowsArbitraryLoads')
+$ReIosAtsTrue = [regex]::new('(?:<true\s*/?>|[:=]\s*true\b)', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+$ReAndroidCleartext = [regex]::new('(?:cleartextTrafficPermitted|android:usesCleartextTraffic)\s*=\s*[''"]true[''"]')
+$ReAndroidExported = [regex]::new('android:exported\s*=\s*[''"]true[''"]')
+$ReCfFlexible = [regex]::new('(?:ssl_mode\s*[:=]\s*[''"]?flexible[''"]?|"ssl"\s*:\s*"flexible")', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+$RePanLog = [regex]::new('(?:logger\.\w+|console\.log|print)\s*\([^)]*(?:card_?number|cardNumber|\bcvv\b|\bcvc\b)', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+$ReExtScript = [regex]::new('<script\b[^>]*\bsrc\s*=\s*[''"]https?://[^''"]+[''"][^>]*>', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+$ReMobileHygiene = [regex]::new('(?:android:allowBackup\s*=\s*[''"]true[''"]|\bkSecAttrAccessibleAlways(?:ThisDeviceOnly)?\b)')
+$ReRustUnsafe = [regex]::new('\bunsafe\s*\{')
+$ReRedos = [regex]::new('(?:new\s+RegExp|re\.compile)\s*\([^)]*\([^)]*[+*][^)]*\)[+*]')
+
+$HtmlExts = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+@('.html', '.htm', '.ejs', '.hbs', '.jinja', '.j2', '.twig', '.vue', '.svelte', '.astro') | ForEach-Object { [void]$HtmlExts.Add($_) }
+
+$CodeRegexExts = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+@('.js', '.ts', '.jsx', '.tsx', '.mjs', '.cjs', '.py', '.rb', '.php', '.java', '.cs', '.go') | ForEach-Object { [void]$CodeRegexExts.Add($_) }
+
 function Mask-Token {
     param([string]$Token)
     if ($Token.Length -le 8) { return "****" }
@@ -290,6 +307,46 @@ function Invoke-ScanFile {
         }
         if ($ReMongoJs.IsMatch($line)) {
             Add-Finding $Findings $Seen "RED" "SEC-RED-011" "MongoDB server-side JavaScript enabled or `$where operator used" "OWASP A05:2025 / CWE-943" $RelPosix $idx $line
+        }
+
+        $atsEnd = [Math]::Min($lines.Count - 1, $i + 1)
+        $atsWindow = ($lines[$i..$atsEnd]) -join "`n"
+        if ($ReIosAtsKey.IsMatch($line) -and $ReIosAtsTrue.IsMatch($atsWindow)) {
+            Add-Finding $Findings $Seen "RED" "SEC-RED-012" "iOS App Transport Security disabled (NSAllowsArbitraryLoads)" "Apple Platform Security / OWASP MASVS-NETWORK" $RelPosix $idx $line
+        }
+        if ($ReAndroidCleartext.IsMatch($line)) {
+            Add-Finding $Findings $Seen "RED" "SEC-RED-012" "Android cleartext network traffic permitted" "OWASP MASVS-NETWORK / CWE-319" $RelPosix $idx $line
+        }
+        if ($lowName -eq "androidmanifest.xml" -and $ReAndroidExported.IsMatch($line)) {
+            $mStart = [Math]::Max(0, $i - 2)
+            $mEnd = [Math]::Min($lines.Count - 1, $i + 5)
+            $manifestWin = ($lines[$mStart..$mEnd]) -join "`n"
+            if (-not $manifestWin.Contains("android:permission") -and -not $manifestWin.Contains("android.intent.action.MAIN")) {
+                Add-Finding $Findings $Seen "RED" "SEC-RED-012" "Android component exported without permission guard" "OWASP MASVS-PLATFORM / CWE-926" $RelPosix $idx $line
+            }
+        }
+        if ($ReCfFlexible.IsMatch($line) -or $RePanLog.IsMatch($line)) {
+            $cfTitle = if ($ReCfFlexible.IsMatch($line)) {
+                "Cloudflare Flexible TLS leaves origin hop unencrypted"
+            } else {
+                "Raw payment card PAN or CVV logged"
+            }
+            Add-Finding $Findings $Seen "RED" "SEC-RED-013" $cfTitle "PCI-DSS v4.0 / CWE-319 / CWE-532" $RelPosix $idx $line
+        }
+        if ($HtmlExts.Contains($ext) -and $ReExtScript.IsMatch($line) -and -not $line.ToLowerInvariant().Contains("integrity=")) {
+            Add-Finding $Findings $Seen "YELLOW" "SEC-YEL-008" "External script tag missing Subresource Integrity (integrity=)" "PCI-DSS v4.0 / OWASP ASVS V3 / CWE-353" $RelPosix $idx $line
+        }
+        if ($ReMobileHygiene.IsMatch($line)) {
+            Add-Finding $Findings $Seen "YELLOW" "SEC-YEL-009" "Insecure mobile backup or deprecated Keychain accessibility" "Apple Platform Security / OWASP MASVS-STORAGE" $RelPosix $idx $line
+        }
+        if ($ext -eq ".rs" -and $ReRustUnsafe.IsMatch($line)) {
+            $prevLine = if ($i -ge 1) { $lines[$i - 1] } else { "" }
+            if (-not $line.Contains("SAFETY:") -and -not $prevLine.Contains("SAFETY:")) {
+                Add-Finding $Findings $Seen "YELLOW" "SEC-YEL-010" "Rust unsafe block missing // SAFETY: invariant comment" "Google Safe Coding / CWE-119" $RelPosix $idx $line
+            }
+        }
+        if ($CodeRegexExts.Contains($ext) -and $ReRedos.IsMatch($line)) {
+            Add-Finding $Findings $Seen "YELLOW" "SEC-YEL-010" "Potential catastrophic ReDoS nested quantifier regex" "OWASP DoS / CWE-1333" $RelPosix $idx $line
         }
         if ($ReWeakCrypto.IsMatch($line)) {
             Add-Finding $Findings $Seen "YELLOW" "SEC-YEL-003" "Deprecated or weak cryptographic primitive" "OWASP A04:2025 / CWE-327 / CWE-328" $RelPosix $idx $line
