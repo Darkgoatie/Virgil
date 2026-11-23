@@ -1,0 +1,152 @@
+# security-engine
+
+Portable security auditing and hardening skill for AI coding agents built on the open [Agent Skills (`SKILL.md`) specification](https://agentskills.io/specification). Audits repositories and returns a structured `[RED]` / `[YELLOW]` vulnerability report backed by deterministic pre-scanners and progressive-disclosure references across web, API/auth, secrets/crypto, databases/storage, containers/CI-CD/supply chain, and AI-agent/MCP security.
+
+---
+
+## Quick Setup
+
+### Windows (PowerShell)
+
+```powershell
+# Auto-detect installed agents on this machine and install globally
+.\install.ps1
+
+# Install for specific agents (gemini, claude, hermes, codex, antigravity, cursor, agents)
+.\install.ps1 -Agent gemini,claude,hermes,codex
+
+# Install for all supported agents globally (or symlink with -Link)
+.\install.ps1 -Agent all
+.\install.ps1 -Agent all -Link
+
+# Install into a specific project repository
+.\install.ps1 -Scope project -TargetRepo C:\path\to\repo -Agent claude,gemini
+
+# Preview or remove
+.\install.ps1 -Agent all -DryRun
+.\install.ps1 -Agent all -Uninstall
+```
+
+### macOS / Linux (Bash)
+
+```bash
+chmod +x install.sh
+
+# Auto-detect installed agents on this machine and install globally
+./install.sh
+
+# Install for specific agents
+./install.sh --agent gemini,claude,hermes,codex
+
+# Install for all supported agents globally (or symlink with --link)
+./install.sh --agent all
+./install.sh --agent all --link
+
+# Install into a specific project repository
+./install.sh --scope project --target /path/to/repo --agent all
+
+# Preview or remove
+./install.sh --agent all --dry-run
+./install.sh --agent all --uninstall
+```
+
+---
+
+## Agent Paths & Native CLI Setups
+
+Every target installs the identical `skills/security-engine/` folder.
+
+| Agent | Global Install Path | Project-Scoped Path | Native CLI / Cross-Agent Notes |
+|---|---|---|---|
+| **Claude Code** | `~/.claude/skills/security-engine` | `.claude/skills/security-engine` | Discovers `SKILL.md` automatically at global or repo scope. |
+| **Gemini CLI** | `~/.gemini/skills/security-engine` | `.gemini/skills/security-engine` | Also recognizes `~/.agents/skills/`; supports `gemini skills install <git-url> --consent`. |
+| **Antigravity** | `~/.gemini/config/skills/security-engine` | `.agents/skills/security-engine` | Project discovery also traverses `.agents/skills/` to the repo root. |
+| **Hermes Agent** | `~/.hermes/skills/security-engine` | `.hermes/skills/security-engine` | Verify installation with `hermes skills list`. |
+| **OpenAI Codex CLI** | `~/.codex/skills/security-engine` | `.codex/skills/security-engine` | Also reads `~/.claude/skills/` and `~/.agents/skills/`. |
+| **Cursor** | `~/.cursor/skills/security-engine` | `.cursor/skills/security-engine` | Discovers `SKILL.md` directories in `.cursor/skills/` and `.agents/skills/`. |
+| **Cross-Agent Standard** | `~/.agents/skills/security-engine` | `.agents/skills/security-engine` | Shared fallback path read by Codex CLI, Gemini CLI, Copilot CLI, and Antigravity. |
+
+If you host this repository on Git, cross-agent install tools also support:
+
+```bash
+npx skills install Darkgoatie/Virgil -a claude,cursor
+```
+
+---
+
+## Running a Security Audit
+
+Once installed, prompt any supported agent inside a repository:
+
+```text
+Run security-engine on this repository and give me the Red and Yellow vulnerability report.
+```
+
+You can also run the bundled pre-scanners directly from the skill directory (zero third-party dependencies):
+
+```bash
+# Python 3 (Linux / macOS / Windows)
+python3 skills/security-engine/scripts/scan.py /path/to/repo
+python3 skills/security-engine/scripts/scan.py /path/to/repo --format json --exit-code
+
+# PowerShell (Windows)
+pwsh -NoProfile -File skills/security-engine/scripts/scan.ps1 -Path C:\path\to\repo
+pwsh -NoProfile -File skills/security-engine/scripts/scan.ps1 -Path C:\path\to\repo -Format json -ExitCode
+```
+
+With `--exit-code` (`-ExitCode`), the scanner exits `2` when `[RED]` findings exist, `1` when only `[YELLOW]` findings exist, and `0` when clean. Without that flag, it exits `0` so agents can parse findings seamlessly. Matched secrets are always masked (`sk_l****abcd`).
+
+---
+
+## Skill Structure
+
+```text
+Virgil/
+├── README.md
+├── install.ps1
+├── install.sh
+└── skills/
+    └── security-engine/
+        ├── SKILL.md                      # Core severity rubric, workflow, report contract
+        ├── references/
+        │   ├── web-browser.md            # Web, frontend bundles, headers, cookies, Electron
+        │   ├── api-auth.md               # OWASP API Top 10, OAuth 2.1, JWT, webhooks, RBAC
+        │   ├── secrets-crypto.md         # Secrets lifecycle, client-key rules, crypto, logs
+        │   ├── db-storage.md             # SQL/NoSQL injection, RLS, Redis, S3/GCS/R2/Blob
+        │   ├── infra-cicd-supply.md      # Docker, K8s, IMDSv2, GitHub Actions, SLSA, SecOps
+        │   └── ai-agent-mcp.md           # LLM/Agentic Top 10, CaMeL, MCP auth, sandboxing
+        └── scripts/
+            ├── scan.py                   # Stdlib Python static pre-scanner
+            └── scan.ps1                  # Native PowerShell static pre-scanner
+```
+
+---
+
+## Example Report Output
+
+```markdown
+# Security Audit Report: example-app
+
+## Summary
+- **Scope inspected:** src/, dist/, .github/workflows/, Dockerfile
+- **Checks executed:** python3 scripts/scan.py . (2 Red, 2 Yellow) + manual route/RLS audit
+- **Counts:** 2 Red, 2 Yellow
+
+## Red Vulnerabilities
+1. **[RED] `SEC-RED-002` — Privileged credential exposed via public frontend env prefix**
+   - **Standard:** OWASP A04:2025 / CWE-798 / CWE-312
+   - **Location:** `src/lib/stripe.ts:4`
+   - **Evidence:** `const key = process.env.NEXT_PUBLIC_STRIPE_SECRET_KEY;`
+   - **Impact:** Build inlines the privileged secret key into public client JavaScript bundles.
+   - **Remediation:** Move Stripe secret operations to server-side routes using `STRIPE_SECRET_KEY` without `NEXT_PUBLIC_`.
+
+## Yellow Vulnerabilities
+1. **[YELLOW] `SEC-YEL-001` — Third-party GitHub Action not pinned to full 40-char commit SHA**
+   - **Standard:** OWASP CICD-SEC-2 / CWE-829
+   - **Location:** `.github/workflows/ci.yml:12`
+   - **Evidence:** `uses: actions/checkout@v4`
+   - **Remediation:** Pin to the immutable 40-character commit SHA with a version comment.
+
+## Unverified / Out-of-Repo Gaps
+- Live Supabase RLS policies and S3 Block Public Access account settings reside outside this repository.
+```

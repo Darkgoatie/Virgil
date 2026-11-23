@@ -1,0 +1,769 @@
+#!/usr/bin/env python3
+"""Static pre-scanner for the security-engine skill (stdlib only)."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import sys
+from dataclasses import asdict, dataclass
+from pathlib import Path
+from typing import Iterable
+
+EXCLUDED_DIRS = {
+    ".git",
+    "node_modules",
+    ".venv",
+    "venv",
+    "__pycache__",
+    "target",
+    "vendor",
+    ".terraform",
+    ".idea",
+    ".vs",
+    ".pnpm-store",
+}
+
+SELF_SKILL_SEGMENTS = (
+    "skills/security-engine",
+    ".claude/skills/security-engine",
+    ".gemini/skills/security-engine",
+    ".gemini/config/skills/security-engine",
+    ".hermes/skills/security-engine",
+    ".codex/skills/security-engine",
+    ".cursor/skills/security-engine",
+    ".agents/skills/security-engine",
+)
+
+BINARY_EXTS = {
+    ".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".woff", ".woff2",
+    ".ttf", ".eot", ".pdf", ".zip", ".tar", ".gz", ".7z", ".exe", ".dll",
+    ".so", ".dylib", ".wasm", ".mp4", ".mp3", ".wav", ".avi", ".mov", ".pyc",
+}
+
+DOC_EXTS = {".md", ".rst", ".txt"}
+
+LOCKFILE_NAMES = {
+    "package-lock.json",
+    "pnpm-lock.yaml",
+    "yarn.lock",
+    "cargo.lock",
+    "poetry.lock",
+    "composer.lock",
+    "gemfile.lock",
+    "go.sum",
+}
+
+MAX_FILE_BYTES = 2 * 1024 * 1024
+
+ENV_SECRET_FILES = {
+    ".env",
+    ".env.local",
+    ".env.production",
+    ".env.staging",
+    ".env.development",
+}
+SAFE_ENV_FILES = {".env.example", ".env.sample", ".env.template", ".env.dist"}
+PRIVATE_KEY_NAMES = {"id_rsa", "id_ed25519", "id_dsa"}
+PRIVATE_KEY_EXTS = {".pem", ".key", ".p12", ".pfx"}
+
+SECRET_TOKEN_PATTERNS = [
+    re.compile(r"AKIA[0-9A-Z]{16}"),
+    re.compile(r"ghp_[A-Za-z0-9]{30,}"),
+    re.compile(r"github_pat_[A-Za-z0-9_]{20,}"),
+    re.compile(r"sk_live_[0-9a-zA-Z]{16,}"),
+    re.compile(r"rk_live_[0-9a-zA-Z]{16,}"),
+    re.compile(r"sk-ant-[A-Za-z0-9_-]{20,}"),
+    re.compile(r"sk-proj-[A-Za-z0-9_-]{20,}"),
+    re.compile(r"xox[baprs]-[0-9A-Za-z-]{10,}"),
+    re.compile(r"AIza[0-9A-Za-z_-]{35}"),
+    re.compile(r"-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----"),
+]
+
+DB_URI_RE = re.compile(
+    r"(?P<prefix>(?:postgres|postgresql|mysql|mongodb(?:\+srv)?|redis|rediss)://[^:\s/'\"`]+:)(?P<pw>[^@\s$<{/'\"`]+)(?P<at>@)"
+)
+PLACEHOLDER_PW_RE = re.compile(
+    r"^(?:password|pass|changeme|placeholder|example|dummy|your[-_].*|\*{2,}|x{3,})$",
+    re.IGNORECASE,
+)
+
+RE_PUBLIC_SECRET_ENV = re.compile(
+    r"\b(?:NEXT_PUBLIC|VITE|EXPO_PUBLIC|REACT_APP|NUXT_PUBLIC)_[A-Z0-9_]*"
+    r"(?:SECRET|SERVICE_ROLE|PRIVATE_KEY|DB_PASSWORD|DATABASE_URL|OPENAI_API_KEY|ANTHROPIC_API_KEY|GEMINI_API_KEY)[A-Z0-9_]*\b"
+)
+
+RE_DISABLED_TLS = re.compile(
+    r"(?:rejectUnauthorized\s*:\s*false|NODE_TLS_REJECT_UNAUTHORIZED\s*=\s*['\"]?0\b|\bverify\s*=\s*False\b|InsecureSkipVerify\s*:\s*true|sslmode=(?:disable|allow|prefer|require)\b)"
+)
+
+RE_SINKS = re.compile(
+    r"(?:dangerouslySetInnerHTML|\bv-html\b|\$queryRawUnsafe\b|\$executeRawUnsafe\b|\beval\s*\(|\bnew\s+Function\s*\(|\bshell\s*=\s*True\b|\bpickle\.loads?\s*\()"
+)
+RE_YAML_LOAD = re.compile(r"\byaml\.load\s*\(")
+RE_YAML_SAFE = re.compile(r"(?:SafeLoader|BaseLoader|CSafeLoader|Loader\s*=)")
+
+RE_JWT_DECODE = re.compile(r"\bjwt\.decode\s*\(")
+RE_JWT_BYPASS = re.compile(r"(?:['\"]?verify_signature['\"]?\s*:\s*False|['\"]?alg['\"]?\s*:\s*['\"]none['\"])")
+
+RE_ELECTRON_BAD = re.compile(
+    r"(?:nodeIntegration\s*:\s*true|contextIsolation\s*:\s*false|webSecurity\s*:\s*false|\bsandbox\s*:\s*false)"
+)
+
+RE_INFRA_EXPOSURE = re.compile(r"(?:privileged\s*:\s*true|/var/run/docker\.sock|PubliclyAccessible\s*[:=]\s*true)")
+RE_CIDR_ALL = re.compile(r"0\.0\.0\.0/0")
+RE_CIDR_CTX = re.compile(
+    r"(?:cidr|ingress|security|postgres|mysql|mongo|redis|5432|3306|27017|6379|ssh|22\b|3389|2375|6443|port)",
+    re.IGNORECASE,
+)
+
+RE_GHA_PRT = re.compile(r"\bpull_request_target\b")
+RE_GHA_EVENT_EXPR = re.compile(
+    r"\$\{\{\s*github\.event\.(?:issue|pull_request|comment|discussion|review|head_commit|commits)"
+)
+RE_GHA_RUN = re.compile(r"^\s*(?:-\s*)?run\s*:")
+RE_GHA_USES_UNPINNED = re.compile(
+    r"^\s*(?:-\s*)?uses\s*:\s*[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@(?:v[0-9][A-Za-z0-9._-]*|main|master|latest)\b"
+)
+RE_GHA_PERMS = re.compile(r"^\s*permissions\s*:")
+
+RE_MONGO_JS = re.compile(r"(?:javascriptEnabled\s*:\s*true|['\"]\$where['\"]\s*:)")
+
+RE_DOCKER_LATEST = re.compile(r"^\s*FROM\s+\S+:latest(?:\s|$)", re.IGNORECASE)
+RE_DOCKER_USER = re.compile(r"^\s*USER\s+(\S+)", re.IGNORECASE)
+RE_DOCKER_SECRET_ENV = re.compile(
+    r"^\s*(?:ARG|ENV)\s+[A-Za-z0-9_]*(?:SECRET|TOKEN|PASSWORD|PASSWD|API_KEY|PRIVATE_KEY)\b",
+    re.IGNORECASE,
+)
+
+RE_WEAK_CRYPTO = re.compile(
+    r"(?:createHash\s*\(\s*['\"](?:md5|sha1)['\"]\s*\)|hashlib\.(?:md5|sha1)\s*\(|AES[-_]?[0-9]*[-_]?ECB|\b(?:RC4|DESede)\b|\bcreateCipher\s*\()"
+)
+RE_NPM_INSTALL = re.compile(r"\bnpm\s+install\b")
+RE_DEBUG_TRUE = re.compile(r"^\s*DEBUG\s*[:=]\s*(?:true|1)\b", re.IGNORECASE)
+RE_CSP_UNSAFE = re.compile(r"(?:'unsafe-inline'|'unsafe-eval')")
+RE_CSP_HEADER = re.compile(r"(?:Content-Security-Policy|script-src|default-src)", re.IGNORECASE)
+
+RE_CORS_ORIGIN_ANY = re.compile(r"(?:origin\s*:\s*(?:true|['\"]\*['\"])|allow_origins\s*=\s*\[\s*['\"]\*['\"]\s*\])")
+RE_CORS_CREDS = re.compile(r"(?:credentials\s*:\s*true|allow_credentials\s*=\s*True)")
+
+
+@dataclass
+class Finding:
+    severity: str
+    rule_id: str
+    title: str
+    standard: str
+    file: str
+    line: int
+    evidence: str
+
+
+def mask_token(token: str) -> str:
+    if len(token) <= 8:
+        return "****"
+    return f"{token[:4]}****{token[-4:]}"
+
+
+def redact_line(text: str) -> str:
+    cleaned = text.replace("\r", "").replace("\n", " ").strip()
+    for pat in SECRET_TOKEN_PATTERNS:
+        cleaned = pat.sub(lambda m: mask_token(m.group(0)), cleaned)
+    cleaned = DB_URI_RE.sub(lambda m: f"{m.group('prefix')}****{m.group('at')}", cleaned)
+    if len(cleaned) > 140:
+        cleaned = cleaned[:137] + "..."
+    return cleaned
+
+
+def is_self_skill_path(rel_posix: str) -> bool:
+    low = rel_posix.lower()
+    return any(seg in low for seg in SELF_SKILL_SEGMENTS)
+
+
+def is_built_bundle_path(rel_posix: str) -> bool:
+    parts = [p.lower() for p in rel_posix.split("/")]
+    if any(p in {"dist", "build", "out"} for p in parts[:-1]):
+        return True
+    low = rel_posix.lower()
+    return low.startswith(".next/static/") or "/.next/static/" in low or low.startswith("public/build/") or "/public/build/" in low
+
+
+def is_public_static_path(rel_posix: str) -> bool:
+    parts = [p.lower() for p in rel_posix.split("/")]
+    return "public" in parts[:-1] or is_built_bundle_path(rel_posix)
+
+
+def is_workflow_file(rel_posix: str) -> bool:
+    low = rel_posix.lower()
+    return low.startswith(".github/workflows/") and (low.endswith(".yml") or low.endswith(".yaml"))
+
+
+def is_dockerfile(name: str) -> bool:
+    low = name.lower()
+    return low == "dockerfile" or low.startswith("dockerfile.") or low.endswith(".dockerfile")
+
+
+def is_iac_or_config(rel_posix: str) -> bool:
+    low = rel_posix.lower()
+    return low.endswith((".tf", ".tfvars", ".yml", ".yaml", ".json", ".toml"))
+
+
+def is_prod_config(rel_posix: str) -> bool:
+    low = rel_posix.lower()
+    name = low.rsplit("/", 1)[-1]
+    return name.startswith(".env.production") or ("prod" in name and name.endswith((".yml", ".yaml", ".json", ".env", ".toml")))
+
+
+def add_finding(
+    findings: list[Finding],
+    seen: set[tuple[str, str, str, int]],
+    severity: str,
+    rule_id: str,
+    title: str,
+    standard: str,
+    rel_posix: str,
+    line_no: int,
+    raw_line: str,
+) -> None:
+    key = (rule_id, title, rel_posix, line_no)
+    if key in seen:
+        return
+    seen.add(key)
+    findings.append(
+        Finding(
+            severity=severity,
+            rule_id=rule_id,
+            title=title,
+            standard=standard,
+            file=rel_posix,
+            line=line_no,
+            evidence=redact_line(raw_line),
+        )
+    )
+
+
+def scan_secret_patterns(line: str) -> bool:
+    for pat in SECRET_TOKEN_PATTERNS:
+        if pat.search(line):
+            return True
+    for m in DB_URI_RE.finditer(line):
+        if not PLACEHOLDER_PW_RE.match(m.group("pw")):
+            return True
+    return False
+
+
+def scan_file(
+    path: Path,
+    rel_posix: str,
+    findings: list[Finding],
+    seen: set[tuple[str, str, str, int]],
+) -> None:
+    name = path.name
+    low_name = name.lower()
+    ext = path.suffix.lower()
+
+    if is_public_static_path(rel_posix) and (low_name.endswith(".js.map") or low_name.endswith(".css.map")):
+        add_finding(
+            findings,
+            seen,
+            "YELLOW",
+            "SEC-YEL-004",
+            "Public production source map exposed",
+            "OWASP A02:2025 / CWE-200",
+            rel_posix,
+            1,
+            f"Source map file in web/bundle output: {rel_posix}",
+        )
+        return
+
+    if low_name in ENV_SECRET_FILES or ext in PRIVATE_KEY_EXTS or low_name in PRIVATE_KEY_NAMES or re.search(
+        r"service[-_]?account.*\.json$", low_name
+    ):
+        if low_name not in SAFE_ENV_FILES:
+            add_finding(
+                findings,
+                seen,
+                "RED",
+                "SEC-RED-003",
+                "Sensitive environment or private key file committed",
+                "OWASP A04:2025 / CWE-312 / CWE-798",
+                rel_posix,
+                1,
+                f"Sensitive file present: {rel_posix}",
+            )
+
+    if ext in BINARY_EXTS or low_name in LOCKFILE_NAMES or low_name.endswith(".map"):
+        return
+
+    try:
+        if path.stat().st_size > MAX_FILE_BYTES:
+            return
+        content = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return
+
+    lines = content.splitlines()
+    bundle_only = is_built_bundle_path(rel_posix)
+    doc_only = ext in DOC_EXTS
+    workflow = is_workflow_file(rel_posix)
+    dockerfile = is_dockerfile(name)
+    iac_cfg = is_iac_or_config(rel_posix)
+    prod_cfg = is_prod_config(rel_posix)
+
+    if bundle_only or doc_only:
+        for idx, line in enumerate(lines, start=1):
+            if scan_secret_patterns(line):
+                title = (
+                    "Hardcoded secret or private key in built frontend bundle"
+                    if bundle_only
+                    else "Hardcoded provider secret, private key, or inline DB credential"
+                )
+                add_finding(
+                    findings,
+                    seen,
+                    "RED",
+                    "SEC-RED-001",
+                    title,
+                    "OWASP A04:2025 / CWE-798",
+                    rel_posix,
+                    idx,
+                    line,
+                )
+        return
+
+    has_gha_perms = False
+    has_docker_user = False
+    in_run_block = False
+    run_indent = 0
+
+    for idx, line in enumerate(lines, start=1):
+        if scan_secret_patterns(line):
+            add_finding(
+                findings,
+                seen,
+                "RED",
+                "SEC-RED-001",
+                "Hardcoded provider secret, private key, or inline DB credential",
+                "OWASP A04:2025 / CWE-798",
+                rel_posix,
+                idx,
+                line,
+            )
+
+        if RE_PUBLIC_SECRET_ENV.search(line):
+            add_finding(
+                findings,
+                seen,
+                "RED",
+                "SEC-RED-002",
+                "Privileged credential exposed via public frontend env prefix",
+                "OWASP A04:2025 / CWE-798 / CWE-312",
+                rel_posix,
+                idx,
+                line,
+            )
+
+        if RE_DISABLED_TLS.search(line):
+            add_finding(
+                findings,
+                seen,
+                "RED",
+                "SEC-RED-004",
+                "TLS certificate or hostname verification disabled",
+                "OWASP A04:2025 / CWE-295",
+                rel_posix,
+                idx,
+                line,
+            )
+
+        window = "\n".join(lines[max(0, idx - 1) : min(len(lines), idx + 5)])
+        cors_window = "\n".join(lines[max(0, idx - 6) : min(len(lines), idx + 6)])
+        if RE_CORS_ORIGIN_ANY.search(line) and RE_CORS_CREDS.search(cors_window):
+            add_finding(
+                findings,
+                seen,
+                "RED",
+                "SEC-RED-005",
+                "Permissive CORS wildcard or reflected origin paired with credentials",
+                "OWASP A02:2025 / CWE-942",
+                rel_posix,
+                idx,
+                line,
+            )
+
+        if RE_SINKS.search(line) or (RE_YAML_LOAD.search(line) and not RE_YAML_SAFE.search(line)):
+            add_finding(
+                findings,
+                seen,
+                "RED",
+                "SEC-RED-006",
+                "High-risk XSS, injection, shell execution, or unsafe deserialization sink",
+                "OWASP A05:2025 / CWE-79 / CWE-89 / CWE-78 / CWE-502",
+                rel_posix,
+                idx,
+                line,
+            )
+
+        if RE_JWT_BYPASS.search(line) or (
+            RE_JWT_DECODE.search(line) and "verify" not in line.lower() and "algorithms" not in line.lower()
+        ):
+            add_finding(
+                findings,
+                seen,
+                "RED",
+                "SEC-RED-007",
+                "Unverified JWT decode or signature bypass",
+                "IETF RFC 8725 / CWE-347",
+                rel_posix,
+                idx,
+                line,
+            )
+
+        if RE_ELECTRON_BAD.search(line):
+            add_finding(
+                findings,
+                seen,
+                "RED",
+                "SEC-RED-008",
+                "Electron renderer sandbox or context isolation disabled",
+                "Electron Security Checklist / CWE-250",
+                rel_posix,
+                idx,
+                line,
+            )
+
+        if RE_INFRA_EXPOSURE.search(line) or (
+            iac_cfg and RE_CIDR_ALL.search(line) and RE_CIDR_CTX.search(window)
+        ):
+            add_finding(
+                findings,
+                seen,
+                "RED",
+                "SEC-RED-009",
+                "Privileged container, Docker socket mount, or public DB/admin ingress",
+                "OWASP A02:2025 / CIS Benchmarks / CWE-250 / CWE-284",
+                rel_posix,
+                idx,
+                line,
+            )
+
+        if RE_MONGO_JS.search(line):
+            add_finding(
+                findings,
+                seen,
+                "RED",
+                "SEC-RED-011",
+                "MongoDB server-side JavaScript enabled or $where operator used",
+                "OWASP A05:2025 / CWE-943",
+                rel_posix,
+                idx,
+                line,
+            )
+
+        if RE_WEAK_CRYPTO.search(line):
+            add_finding(
+                findings,
+                seen,
+                "YELLOW",
+                "SEC-YEL-003",
+                "Deprecated or weak cryptographic primitive",
+                "OWASP A04:2025 / CWE-327 / CWE-328",
+                rel_posix,
+                idx,
+                line,
+            )
+
+        if RE_CSP_UNSAFE.search(line) and RE_CSP_HEADER.search(window):
+            add_finding(
+                findings,
+                seen,
+                "YELLOW",
+                "SEC-YEL-006",
+                "Weak Content-Security-Policy directive ('unsafe-inline' or 'unsafe-eval')",
+                "OWASP ASVS V3 / CWE-79",
+                rel_posix,
+                idx,
+                line,
+            )
+
+        if workflow:
+            stripped = line.lstrip(" ")
+            indent = len(line) - len(stripped)
+            if in_run_block and stripped and not stripped.startswith("#") and indent <= run_indent:
+                in_run_block = False
+            if RE_GHA_RUN.match(line):
+                in_run_block = True
+                run_indent = indent
+            if RE_GHA_PRT.search(line):
+                add_finding(
+                    findings,
+                    seen,
+                    "RED",
+                    "SEC-RED-010",
+                    "GitHub Actions pull_request_target privileged trigger",
+                    "OWASP CICD-SEC-1 / CICD-SEC-4",
+                    rel_posix,
+                    idx,
+                    line,
+                )
+            elif in_run_block and RE_GHA_EVENT_EXPR.search(line):
+                add_finding(
+                    findings,
+                    seen,
+                    "RED",
+                    "SEC-RED-010",
+                    "GitHub Actions script injection via untrusted event context in run block",
+                    "OWASP CICD-SEC-4 / CWE-78 / CWE-94",
+                    rel_posix,
+                    idx,
+                    line,
+                )
+            if RE_GHA_USES_UNPINNED.match(line):
+                add_finding(
+                    findings,
+                    seen,
+                    "YELLOW",
+                    "SEC-YEL-001",
+                    "Third-party GitHub Action not pinned to full 40-char commit SHA",
+                    "OWASP CICD-SEC-2 / CWE-829",
+                    rel_posix,
+                    idx,
+                    line,
+                )
+            if RE_GHA_PERMS.match(line):
+                has_gha_perms = True
+            if RE_NPM_INSTALL.search(line):
+                add_finding(
+                    findings,
+                    seen,
+                    "YELLOW",
+                    "SEC-YEL-005",
+                    "Non-deterministic npm install in workflow instead of npm ci --ignore-scripts",
+                    "OWASP A03:2025 / SLSA",
+                    rel_posix,
+                    idx,
+                    line,
+                )
+
+        if dockerfile:
+            if RE_DOCKER_LATEST.match(line):
+                add_finding(
+                    findings,
+                    seen,
+                    "YELLOW",
+                    "SEC-YEL-002",
+                    "Mutable :latest base image tag in Dockerfile",
+                    "OWASP Docker Cheat Sheet / CWE-494",
+                    rel_posix,
+                    idx,
+                    line,
+                )
+            m_user = RE_DOCKER_USER.match(line)
+            if m_user:
+                if m_user.group(1).lower() in {"0", "root", "0:0", "root:root"}:
+                    add_finding(
+                        findings,
+                        seen,
+                        "YELLOW",
+                        "SEC-YEL-002",
+                        "Dockerfile runs container as root user",
+                        "OWASP Docker Cheat Sheet / CWE-250",
+                        rel_posix,
+                        idx,
+                        line,
+                    )
+                else:
+                    has_docker_user = True
+            if RE_DOCKER_SECRET_ENV.match(line):
+                add_finding(
+                    findings,
+                    seen,
+                    "YELLOW",
+                    "SEC-YEL-002",
+                    "Secret-like ARG or ENV declared in Dockerfile",
+                    "OWASP Docker Cheat Sheet / CWE-798",
+                    rel_posix,
+                    idx,
+                    line,
+                )
+            if RE_NPM_INSTALL.search(line):
+                add_finding(
+                    findings,
+                    seen,
+                    "YELLOW",
+                    "SEC-YEL-005",
+                    "Non-deterministic npm install in Dockerfile instead of npm ci --ignore-scripts",
+                    "OWASP A03:2025 / SLSA",
+                    rel_posix,
+                    idx,
+                    line,
+                )
+            if RE_DEBUG_TRUE.match(line) or ("DEBUG=true" in line or "DEBUG=1" in line):
+                add_finding(
+                    findings,
+                    seen,
+                    "YELLOW",
+                    "SEC-YEL-005",
+                    "Debug mode enabled in Dockerfile",
+                    "OWASP A02:2025 / CWE-215",
+                    rel_posix,
+                    idx,
+                    line,
+                )
+
+        if prod_cfg and RE_DEBUG_TRUE.match(line):
+            add_finding(
+                findings,
+                seen,
+                "YELLOW",
+                "SEC-YEL-005",
+                "Debug mode enabled in production configuration",
+                "OWASP A02:2025 / CWE-215",
+                rel_posix,
+                idx,
+                line,
+            )
+
+    if workflow and not has_gha_perms:
+        add_finding(
+            findings,
+            seen,
+            "YELLOW",
+            "SEC-YEL-001",
+            "Workflow missing explicit minimal GITHUB_TOKEN permissions block",
+            "OWASP CICD-SEC-6",
+            rel_posix,
+            1,
+            "No top-level or job permissions: declaration found",
+        )
+
+    if dockerfile and not has_docker_user:
+        add_finding(
+            findings,
+            seen,
+            "YELLOW",
+            "SEC-YEL-002",
+            "Dockerfile missing non-root USER directive",
+            "OWASP Docker Cheat Sheet / CWE-250",
+            rel_posix,
+            1,
+            "No non-root USER instruction found",
+        )
+
+
+def walk_repo(root: Path) -> Iterable[tuple[Path, str]]:
+    for dirpath, dirnames, filenames in os.walk(root):
+        dir_rel = Path(dirpath).relative_to(root).as_posix()
+        kept_dirs = []
+        for d in sorted(dirnames):
+            if d in EXCLUDED_DIRS:
+                continue
+            cand_rel = d if dir_rel == "." else f"{dir_rel}/{d}"
+            if is_self_skill_path(cand_rel):
+                continue
+            kept_dirs.append(d)
+        dirnames[:] = kept_dirs
+        for fname in sorted(filenames):
+            fpath = Path(dirpath) / fname
+            rel_posix = fname if dir_rel == "." else f"{dir_rel}/{fname}"
+            if is_self_skill_path(rel_posix):
+                continue
+            yield fpath, rel_posix
+
+
+def render_markdown(repo_name: str, files_scanned: int, findings: list[Finding]) -> str:
+    reds = [f for f in findings if f.severity == "RED"]
+    yellows = [f for f in findings if f.severity == "YELLOW"]
+    lines = [
+        f"# Pre-Scan Results: {repo_name}",
+        "",
+        "## Summary",
+        f"- **Files inspected:** {files_scanned}",
+        f"- **Counts:** {len(reds)} Red, {len(yellows)} Yellow",
+        "",
+        "## Red Vulnerabilities",
+    ]
+    if not reds:
+        lines.append("None found by static pre-scanner.")
+    else:
+        for idx, f in enumerate(reds, start=1):
+            lines.extend([
+                f"{idx}. **[RED] `{f.rule_id}` — {f.title}**",
+                f"   - **Standard:** {f.standard}",
+                f"   - **Location:** `{f.file}:{f.line}`",
+                f"   - **Evidence:** `{f.evidence}`",
+            ])
+    lines.extend(["", "## Yellow Vulnerabilities"])
+    if not yellows:
+        lines.append("None found by static pre-scanner.")
+    else:
+        for idx, f in enumerate(yellows, start=1):
+            lines.extend([
+                f"{idx}. **[YELLOW] `{f.rule_id}` — {f.title}**",
+                f"   - **Standard:** {f.standard}",
+                f"   - **Location:** `{f.file}:{f.line}`",
+                f"   - **Evidence:** `{f.evidence}`",
+            ])
+    return "\n".join(lines)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Deterministic static pre-scanner for security-engine.")
+    parser.add_argument("target", nargs="?", default=".", help="Target repository directory")
+    parser.add_argument("--format", choices=["markdown", "json"], default="markdown")
+    parser.add_argument("--exit-code", action="store_true", help="Exit 2 on Red, 1 on Yellow only, 0 on clean")
+    args = parser.parse_args()
+
+    root = Path(args.target).resolve()
+    if not root.is_dir():
+        print(f"Error: target directory not found: {root}", file=sys.stderr)
+        return 2
+
+    findings: list[Finding] = []
+    seen: set[tuple[str, str, str, int]] = set()
+    files_scanned = 0
+
+    for fpath, rel_posix in walk_repo(root):
+        files_scanned += 1
+        scan_file(fpath, rel_posix, findings, seen)
+
+    if not (root / "SECURITY.md").is_file() and not (root / ".github" / "SECURITY.md").is_file():
+        add_finding(
+            findings,
+            seen,
+            "YELLOW",
+            "SEC-YEL-007",
+            "Missing root SECURITY.md vulnerability disclosure policy",
+            "NIST SSDF / IETF RFC 9116",
+            "SECURITY.md",
+            1,
+            "Neither SECURITY.md nor .github/SECURITY.md exists",
+        )
+
+    reds = [f for f in findings if f.severity == "RED"]
+    yellows = [f for f in findings if f.severity == "YELLOW"]
+
+    if args.format == "json":
+        payload = {
+            "target": str(root),
+            "files_scanned": files_scanned,
+            "counts": {"red": len(reds), "yellow": len(yellows)},
+            "red": [asdict(f) for f in reds],
+            "yellow": [asdict(f) for f in yellows],
+        }
+        print(json.dumps(payload, indent=2))
+    else:
+        print(render_markdown(root.name, files_scanned, findings))
+
+    if args.exit_code:
+        if reds:
+            return 2
+        if yellows:
+            return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,0 +1,459 @@
+﻿[CmdletBinding()]
+param(
+    [Parameter(Position = 0)]
+    [string]$Path = ".",
+
+    [ValidateSet("markdown", "json")]
+    [string]$Format = "markdown",
+
+    [switch]$ExitCode
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+$ExcludedDirs = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+@(
+    ".git", "node_modules", ".venv", "venv", "__pycache__",
+    "target", "vendor", ".terraform", ".idea", ".vs", ".pnpm-store"
+) | ForEach-Object { [void]$ExcludedDirs.Add($_) }
+
+$SelfSkillSegments = @(
+    "skills/security-engine",
+    ".claude/skills/security-engine",
+    ".gemini/skills/security-engine",
+    ".gemini/config/skills/security-engine",
+    ".hermes/skills/security-engine",
+    ".codex/skills/security-engine",
+    ".cursor/skills/security-engine",
+    ".agents/skills/security-engine"
+)
+
+$BinaryExts = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+@(
+    ".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".woff", ".woff2",
+    ".ttf", ".eot", ".pdf", ".zip", ".tar", ".gz", ".7z", ".exe", ".dll",
+    ".so", ".dylib", ".wasm", ".mp4", ".mp3", ".wav", ".avi", ".mov", ".pyc"
+) | ForEach-Object { [void]$BinaryExts.Add($_) }
+
+$DocExts = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+@(".md", ".rst", ".txt") | ForEach-Object { [void]$DocExts.Add($_) }
+
+$LockfileNames = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+@(
+    "package-lock.json", "pnpm-lock.yaml", "yarn.lock", "Cargo.lock",
+    "poetry.lock", "composer.lock", "Gemfile.lock", "go.sum"
+) | ForEach-Object { [void]$LockfileNames.Add($_) }
+
+$EnvSecretFiles = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+@(".env", ".env.local", ".env.production", ".env.staging", ".env.development") | ForEach-Object { [void]$EnvSecretFiles.Add($_) }
+
+$SafeEnvFiles = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+@(".env.example", ".env.sample", ".env.template", ".env.dist") | ForEach-Object { [void]$SafeEnvFiles.Add($_) }
+
+$PrivateKeyNames = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+@("id_rsa", "id_ed25519", "id_dsa") | ForEach-Object { [void]$PrivateKeyNames.Add($_) }
+
+$PrivateKeyExts = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+@(".pem", ".key", ".p12", ".pfx") | ForEach-Object { [void]$PrivateKeyExts.Add($_) }
+
+$MaxFileBytes = 2MB
+
+$SecretTokenRegexes = @(
+    [regex]::new('AKIA[0-9A-Z]{16}'),
+    [regex]::new('ghp_[A-Za-z0-9]{30,}'),
+    [regex]::new('github_pat_[A-Za-z0-9_]{20,}'),
+    [regex]::new('sk_live_[0-9a-zA-Z]{16,}'),
+    [regex]::new('rk_live_[0-9a-zA-Z]{16,}'),
+    [regex]::new('sk-ant-[A-Za-z0-9_-]{20,}'),
+    [regex]::new('sk-proj-[A-Za-z0-9_-]{20,}'),
+    [regex]::new('xox[baprs]-[0-9A-Za-z-]{10,}'),
+    [regex]::new('AIza[0-9A-Za-z_-]{35}'),
+    [regex]::new('-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----')
+)
+
+$DbUriRegex = [regex]::new('(?<prefix>(?:postgres|postgresql|mysql|mongodb(?:\+srv)?|redis|rediss)://[^:\s/''"`]+:)(?<pw>[^@\s$<{/''"`]+)(?<at>@)')
+$PlaceholderPwRegex = [regex]::new('^(?:password|pass|changeme|placeholder|example|dummy|your[-_].*|\*{2,}|x{3,})$', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+
+$RePublicSecretEnv = [regex]::new('\b(?:NEXT_PUBLIC|VITE|EXPO_PUBLIC|REACT_APP|NUXT_PUBLIC)_[A-Z0-9_]*(?:SECRET|SERVICE_ROLE|PRIVATE_KEY|DB_PASSWORD|DATABASE_URL|OPENAI_API_KEY|ANTHROPIC_API_KEY|GEMINI_API_KEY)[A-Z0-9_]*\b')
+$ReDisabledTls = [regex]::new('(?:rejectUnauthorized\s*:\s*false|NODE_TLS_REJECT_UNAUTHORIZED\s*=\s*[''"]?0\b|\bverify\s*=\s*False\b|InsecureSkipVerify\s*:\s*true|sslmode=(?:disable|allow|prefer|require)\b)')
+$ReSinks = [regex]::new('(?:dangerouslySetInnerHTML|\bv-html\b|\$queryRawUnsafe\b|\$executeRawUnsafe\b|\beval\s*\(|\bnew\s+Function\s*\(|\bshell\s*=\s*True\b|\bpickle\.loads?\s*\()')
+$ReYamlLoad = [regex]::new('\byaml\.load\s*\(')
+$ReYamlSafe = [regex]::new('(?:SafeLoader|BaseLoader|CSafeLoader|Loader\s*=)')
+$ReJwtDecode = [regex]::new('\bjwt\.decode\s*\(')
+$ReJwtBypass = [regex]::new('(?:[''"]?verify_signature[''"]?\s*:\s*False|[''"]?alg[''"]?\s*:\s*[''"]none[''"])')
+$ReElectronBad = [regex]::new('(?:nodeIntegration\s*:\s*true|contextIsolation\s*:\s*false|webSecurity\s*:\s*false|\bsandbox\s*:\s*false)')
+$ReInfraExposure = [regex]::new('(?:privileged\s*:\s*true|/var/run/docker\.sock|PubliclyAccessible\s*[:=]\s*true)')
+$ReCidrAll = [regex]::new('0\.0\.0\.0/0')
+$ReCidrCtx = [regex]::new('(?:cidr|ingress|security|postgres|mysql|mongo|redis|5432|3306|27017|6379|ssh|22\b|3389|2375|6443|port)', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+$ReGhaPrt = [regex]::new('\bpull_request_target\b')
+$ReGhaEventExpr = [regex]::new('\$\{\{\s*github\.event\.(?:issue|pull_request|comment|discussion|review|head_commit|commits)')
+$ReGhaRun = [regex]::new('^\s*(?:-\s*)?run\s*:')
+$ReGhaUsesUnpinned = [regex]::new('^\s*(?:-\s*)?uses\s*:\s*[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@(?:v[0-9][A-Za-z0-9._-]*|main|master|latest)\b')
+$ReGhaPerms = [regex]::new('^\s*permissions\s*:')
+$ReMongoJs = [regex]::new('(?:javascriptEnabled\s*:\s*true|[''"]\$where[''"]\s*:)')
+$ReDockerLatest = [regex]::new('^\s*FROM\s+\S+:latest(?:\s|$)', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+$ReDockerUser = [regex]::new('^\s*USER\s+(\S+)', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+$ReDockerSecretEnv = [regex]::new('^\s*(?:ARG|ENV)\s+[A-Za-z0-9_]*(?:SECRET|TOKEN|PASSWORD|PASSWD|API_KEY|PRIVATE_KEY)\b', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+$ReWeakCrypto = [regex]::new('(?:createHash\s*\(\s*[''"](?:md5|sha1)[''"]\s*\)|hashlib\.(?:md5|sha1)\s*\(|AES[-_]?[0-9]*[-_]?ECB|\b(?:RC4|DESede)\b|\bcreateCipher\s*\()')
+$ReNpmInstall = [regex]::new('\bnpm\s+install\b')
+$ReDebugTrue = [regex]::new('^\s*DEBUG\s*[:=]\s*(?:true|1)\b', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+$ReCspUnsafe = [regex]::new('(?:''unsafe-inline''|''unsafe-eval'')')
+$ReCspHeader = [regex]::new('(?:Content-Security-Policy|script-src|default-src)', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+$ReCorsOriginAny = [regex]::new('(?:origin\s*:\s*(?:true|[''"]\*[''"])|allow_origins\s*=\s*\[\s*[''"]\*[''"]\s*\])')
+$ReCorsCreds = [regex]::new('(?:credentials\s*:\s*true|allow_credentials\s*=\s*True)')
+
+function Mask-Token {
+    param([string]$Token)
+    if ($Token.Length -le 8) { return "****" }
+    return "{0}****{1}" -f $Token.Substring(0, 4), $Token.Substring($Token.Length - 4)
+}
+
+function Redact-Line {
+    param([string]$Text)
+    $cleaned = ($Text -replace "`r", "" -replace "`n", " ").Trim()
+    foreach ($rx in $SecretTokenRegexes) {
+        $cleaned = $rx.Replace($cleaned, { param($m) Mask-Token $m.Value })
+    }
+    $cleaned = $DbUriRegex.Replace($cleaned, {
+        param($m)
+        "{0}****{1}" -f $m.Groups["prefix"].Value, $m.Groups["at"].Value
+    })
+    if ($cleaned.Length -gt 140) {
+        $cleaned = $cleaned.Substring(0, 137) + "..."
+    }
+    return $cleaned
+}
+
+function Test-SelfSkillPath {
+    param([string]$RelPosix)
+    $low = $RelPosix.ToLowerInvariant()
+    foreach ($seg in $SelfSkillSegments) {
+        if ($low.Contains($seg)) { return $true }
+    }
+    return $false
+}
+
+function Test-BuiltBundlePath {
+    param([string]$RelPosix)
+    $parts = $RelPosix.ToLowerInvariant().Split("/")
+    if ($parts.Length -gt 1) {
+        foreach ($p in $parts[0..($parts.Length - 2)]) {
+            if ($p -in @("dist", "build", "out")) { return $true }
+        }
+    }
+    $low = $RelPosix.ToLowerInvariant()
+    return $low.StartsWith(".next/static/") -or $low.Contains("/.next/static/") -or $low.StartsWith("public/build/") -or $low.Contains("/public/build/")
+}
+
+function Test-PublicStaticPath {
+    param([string]$RelPosix)
+    if (Test-BuiltBundlePath $RelPosix) { return $true }
+    $parts = $RelPosix.ToLowerInvariant().Split("/")
+    if ($parts.Length -gt 1) {
+        return ($parts[0..($parts.Length - 2)] -contains "public")
+    }
+    return $false
+}
+
+function Test-SecretPatterns {
+    param([string]$Line)
+    foreach ($rx in $SecretTokenRegexes) {
+        if ($rx.IsMatch($Line)) { return $true }
+    }
+    foreach ($m in $DbUriRegex.Matches($Line)) {
+        if (-not $PlaceholderPwRegex.IsMatch($m.Groups["pw"].Value)) {
+            return $true
+        }
+    }
+    return $false
+}
+
+function Add-Finding {
+    param(
+        [System.Collections.Generic.List[object]]$Findings,
+        [System.Collections.Generic.HashSet[string]]$Seen,
+        [string]$Severity,
+        [string]$RuleId,
+        [string]$Title,
+        [string]$Standard,
+        [string]$RelPosix,
+        [int]$LineNo,
+        [string]$RawLine
+    )
+    $key = "$RuleId|$Title|$RelPosix|$LineNo"
+    if ($Seen.Contains($key)) { return }
+    [void]$Seen.Add($key)
+    $Findings.Add([pscustomobject]@{
+        severity = $Severity
+        rule_id  = $RuleId
+        title    = $Title
+        standard = $Standard
+        file     = $RelPosix
+        line     = $LineNo
+        evidence = (Redact-Line $RawLine)
+    })
+}
+
+function Invoke-ScanFile {
+    param(
+        [System.IO.FileInfo]$FileInfo,
+        [string]$RelPosix,
+        [System.Collections.Generic.List[object]]$Findings,
+        [System.Collections.Generic.HashSet[string]]$Seen
+    )
+    $name = $FileInfo.Name
+    $lowName = $name.ToLowerInvariant()
+    $ext = $FileInfo.Extension.ToLowerInvariant()
+
+    if ((Test-PublicStaticPath $RelPosix) -and ($lowName.EndsWith(".js.map") -or $lowName.EndsWith(".css.map"))) {
+        Add-Finding $Findings $Seen "YELLOW" "SEC-YEL-004" "Public production source map exposed" "OWASP A02:2025 / CWE-200" $RelPosix 1 "Source map file in web/bundle output: $RelPosix"
+        return
+    }
+
+    if ($EnvSecretFiles.Contains($lowName) -or $PrivateKeyExts.Contains($ext) -or $PrivateKeyNames.Contains($lowName) -or ($lowName -match "service[-_]?account.*\.json$")) {
+        if (-not $SafeEnvFiles.Contains($lowName)) {
+            Add-Finding $Findings $Seen "RED" "SEC-RED-003" "Sensitive environment or private key file committed" "OWASP A04:2025 / CWE-312 / CWE-798" $RelPosix 1 "Sensitive file present: $RelPosix"
+        }
+    }
+
+    if ($BinaryExts.Contains($ext) -or $LockfileNames.Contains($lowName) -or $lowName.EndsWith(".map")) { return }
+    if ($FileInfo.Length -gt $MaxFileBytes) { return }
+
+    try {
+        $content = [System.IO.File]::ReadAllText($FileInfo.FullName)
+    } catch {
+        return
+    }
+
+    $lines = $content -split "`r?`n"
+    $bundleOnly = Test-BuiltBundlePath $RelPosix
+    $docOnly = $DocExts.Contains($ext)
+    $lowRel = $RelPosix.ToLowerInvariant()
+    $workflow = $lowRel.StartsWith(".github/workflows/") -and ($lowRel.EndsWith(".yml") -or $lowRel.EndsWith(".yaml"))
+    $dockerfile = ($lowName -eq "dockerfile") -or $lowName.StartsWith("dockerfile.") -or $lowName.EndsWith(".dockerfile")
+    $iacCfg = $lowRel -match "\.(?:tf|tfvars|ya?ml|json|toml)$"
+    $prodCfg = $lowName.StartsWith(".env.production") -or ($lowName.Contains("prod") -and ($lowName -match "\.(?:ya?ml|json|env|toml)$"))
+
+    if ($bundleOnly -or $docOnly) {
+        $title = if ($bundleOnly) {
+            "Hardcoded secret or private key in built frontend bundle"
+        } else {
+            "Hardcoded provider secret, private key, or inline DB credential"
+        }
+        for ($i = 0; $i -lt $lines.Count; $i++) {
+            if (Test-SecretPatterns $lines[$i]) {
+                Add-Finding $Findings $Seen "RED" "SEC-RED-001" $title "OWASP A04:2025 / CWE-798" $RelPosix ($i + 1) $lines[$i]
+            }
+        }
+        return
+    }
+
+    $hasGhaPerms = $false
+    $hasDockerUser = $false
+    $inRunBlock = $false
+    $runIndent = 0
+
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        $idx = $i + 1
+        $line = $lines[$i]
+
+        if (Test-SecretPatterns $line) {
+            Add-Finding $Findings $Seen "RED" "SEC-RED-001" "Hardcoded provider secret, private key, or inline DB credential" "OWASP A04:2025 / CWE-798" $RelPosix $idx $line
+        }
+        if ($RePublicSecretEnv.IsMatch($line)) {
+            Add-Finding $Findings $Seen "RED" "SEC-RED-002" "Privileged credential exposed via public frontend env prefix" "OWASP A04:2025 / CWE-798 / CWE-312" $RelPosix $idx $line
+        }
+        if ($ReDisabledTls.IsMatch($line)) {
+            Add-Finding $Findings $Seen "RED" "SEC-RED-004" "TLS certificate or hostname verification disabled" "OWASP A04:2025 / CWE-295" $RelPosix $idx $line
+        }
+
+        $startIdx = [Math]::Max(0, $i - 5)
+        $endIdx = [Math]::Min($lines.Count - 1, $i + 5)
+        $window = ($lines[$i..$endIdx]) -join "`n"
+        $corsWindow = ($lines[$startIdx..$endIdx]) -join "`n"
+
+        if ($ReCorsOriginAny.IsMatch($line) -and $ReCorsCreds.IsMatch($corsWindow)) {
+            Add-Finding $Findings $Seen "RED" "SEC-RED-005" "Permissive CORS wildcard or reflected origin paired with credentials" "OWASP A02:2025 / CWE-942" $RelPosix $idx $line
+        }
+        if ($ReSinks.IsMatch($line) -or ($ReYamlLoad.IsMatch($line) -and -not $ReYamlSafe.IsMatch($line))) {
+            Add-Finding $Findings $Seen "RED" "SEC-RED-006" "High-risk XSS, injection, shell execution, or unsafe deserialization sink" "OWASP A05:2025 / CWE-79 / CWE-89 / CWE-78 / CWE-502" $RelPosix $idx $line
+        }
+        if ($ReJwtBypass.IsMatch($line) -or ($ReJwtDecode.IsMatch($line) -and $line.ToLowerInvariant() -notmatch "verify|algorithms")) {
+            Add-Finding $Findings $Seen "RED" "SEC-RED-007" "Unverified JWT decode or signature bypass" "IETF RFC 8725 / CWE-347" $RelPosix $idx $line
+        }
+        if ($ReElectronBad.IsMatch($line)) {
+            Add-Finding $Findings $Seen "RED" "SEC-RED-008" "Electron renderer sandbox or context isolation disabled" "Electron Security Checklist / CWE-250" $RelPosix $idx $line
+        }
+        if ($ReInfraExposure.IsMatch($line) -or ($iacCfg -and $ReCidrAll.IsMatch($line) -and $ReCidrCtx.IsMatch($window))) {
+            Add-Finding $Findings $Seen "RED" "SEC-RED-009" "Privileged container, Docker socket mount, or public DB/admin ingress" "OWASP A02:2025 / CIS Benchmarks / CWE-250 / CWE-284" $RelPosix $idx $line
+        }
+        if ($ReMongoJs.IsMatch($line)) {
+            Add-Finding $Findings $Seen "RED" "SEC-RED-011" "MongoDB server-side JavaScript enabled or `$where operator used" "OWASP A05:2025 / CWE-943" $RelPosix $idx $line
+        }
+        if ($ReWeakCrypto.IsMatch($line)) {
+            Add-Finding $Findings $Seen "YELLOW" "SEC-YEL-003" "Deprecated or weak cryptographic primitive" "OWASP A04:2025 / CWE-327 / CWE-328" $RelPosix $idx $line
+        }
+        if ($ReCspUnsafe.IsMatch($line) -and $ReCspHeader.IsMatch($window)) {
+            Add-Finding $Findings $Seen "YELLOW" "SEC-YEL-006" "Weak Content-Security-Policy directive ('unsafe-inline' or 'unsafe-eval')" "OWASP ASVS V3 / CWE-79" $RelPosix $idx $line
+        }
+
+        if ($workflow) {
+            $trimmed = $line.TrimStart(" ")
+            $indent = $line.Length - $trimmed.Length
+            if ($inRunBlock -and $trimmed.Length -gt 0 -and -not $trimmed.StartsWith("#") -and $indent -le $runIndent) {
+                $inRunBlock = $false
+            }
+            if ($ReGhaRun.IsMatch($line)) {
+                $inRunBlock = $true
+                $runIndent = $indent
+            }
+            if ($ReGhaPrt.IsMatch($line)) {
+                Add-Finding $Findings $Seen "RED" "SEC-RED-010" "GitHub Actions pull_request_target privileged trigger" "OWASP CICD-SEC-1 / CICD-SEC-4" $RelPosix $idx $line
+            } elseif ($inRunBlock -and $ReGhaEventExpr.IsMatch($line)) {
+                Add-Finding $Findings $Seen "RED" "SEC-RED-010" "GitHub Actions script injection via untrusted event context in run block" "OWASP CICD-SEC-4 / CWE-78 / CWE-94" $RelPosix $idx $line
+            }
+            if ($ReGhaUsesUnpinned.IsMatch($line)) {
+                Add-Finding $Findings $Seen "YELLOW" "SEC-YEL-001" "Third-party GitHub Action not pinned to full 40-char commit SHA" "OWASP CICD-SEC-2 / CWE-829" $RelPosix $idx $line
+            }
+            if ($ReGhaPerms.IsMatch($line)) { $hasGhaPerms = $true }
+            if ($ReNpmInstall.IsMatch($line)) {
+                Add-Finding $Findings $Seen "YELLOW" "SEC-YEL-005" "Non-deterministic npm install in workflow instead of npm ci --ignore-scripts" "OWASP A03:2025 / SLSA" $RelPosix $idx $line
+            }
+        }
+
+        if ($dockerfile) {
+            if ($ReDockerLatest.IsMatch($line)) {
+                Add-Finding $Findings $Seen "YELLOW" "SEC-YEL-002" "Mutable :latest base image tag in Dockerfile" "OWASP Docker Cheat Sheet / CWE-494" $RelPosix $idx $line
+            }
+            $mUser = $ReDockerUser.Match($line)
+            if ($mUser.Success) {
+                $uVal = $mUser.Groups[1].Value.ToLowerInvariant()
+                if ($uVal -in @("0", "root", "0:0", "root:root")) {
+                    Add-Finding $Findings $Seen "YELLOW" "SEC-YEL-002" "Dockerfile runs container as root user" "OWASP Docker Cheat Sheet / CWE-250" $RelPosix $idx $line
+                } else {
+                    $hasDockerUser = $true
+                }
+            }
+            if ($ReDockerSecretEnv.IsMatch($line)) {
+                Add-Finding $Findings $Seen "YELLOW" "SEC-YEL-002" "Secret-like ARG or ENV declared in Dockerfile" "OWASP Docker Cheat Sheet / CWE-798" $RelPosix $idx $line
+            }
+            if ($ReNpmInstall.IsMatch($line)) {
+                Add-Finding $Findings $Seen "YELLOW" "SEC-YEL-005" "Non-deterministic npm install in Dockerfile instead of npm ci --ignore-scripts" "OWASP A03:2025 / SLSA" $RelPosix $idx $line
+            }
+            if ($ReDebugTrue.IsMatch($line) -or $line.Contains("DEBUG=true") -or $line.Contains("DEBUG=1")) {
+                Add-Finding $Findings $Seen "YELLOW" "SEC-YEL-005" "Debug mode enabled in Dockerfile" "OWASP A02:2025 / CWE-215" $RelPosix $idx $line
+            }
+        }
+
+        if ($prodCfg -and $ReDebugTrue.IsMatch($line)) {
+            Add-Finding $Findings $Seen "YELLOW" "SEC-YEL-005" "Debug mode enabled in production configuration" "OWASP A02:2025 / CWE-215" $RelPosix $idx $line
+        }
+    }
+
+    if ($workflow -and -not $hasGhaPerms) {
+        Add-Finding $Findings $Seen "YELLOW" "SEC-YEL-001" "Workflow missing explicit minimal GITHUB_TOKEN permissions block" "OWASP CICD-SEC-6" $RelPosix 1 "No top-level or job permissions: declaration found"
+    }
+    if ($dockerfile -and -not $hasDockerUser) {
+        Add-Finding $Findings $Seen "YELLOW" "SEC-YEL-002" "Dockerfile missing non-root USER directive" "OWASP Docker Cheat Sheet / CWE-250" $RelPosix 1 "No non-root USER instruction found"
+    }
+}
+
+if (-not (Test-Path -LiteralPath $Path -PathType Container)) {
+    [Console]::Error.WriteLine("Error: target directory not found: $Path")
+    exit 2
+}
+
+$RootInfo = (Get-Item -LiteralPath $Path).FullName
+$RootDir = [System.IO.DirectoryInfo]::new($RootInfo)
+$Findings = [System.Collections.Generic.List[object]]::new()
+$Seen = [System.Collections.Generic.HashSet[string]]::new()
+$FilesScanned = 0
+
+$Stack = [System.Collections.Generic.Stack[System.IO.DirectoryInfo]]::new()
+$Stack.Push($RootDir)
+
+while ($Stack.Count -gt 0) {
+    $curr = $Stack.Pop()
+    try {
+        $dirs = $curr.GetDirectories() | Sort-Object Name -Descending
+        foreach ($d in $dirs) {
+            if ($ExcludedDirs.Contains($d.Name)) { continue }
+            $relDir = $d.FullName.Substring($RootDir.FullName.Length).TrimStart("\", "/").Replace("\", "/")
+            if (Test-SelfSkillPath $relDir) { continue }
+            $Stack.Push($d)
+        }
+        $files = $curr.GetFiles() | Sort-Object Name
+        foreach ($f in $files) {
+            $relFile = $f.FullName.Substring($RootDir.FullName.Length).TrimStart("\", "/").Replace("\", "/")
+            if (Test-SelfSkillPath $relFile) { continue }
+            $FilesScanned++
+            Invoke-ScanFile $f $relFile $Findings $Seen
+        }
+    } catch {
+        continue
+    }
+}
+
+$secMdRoot = Join-Path $RootDir.FullName "SECURITY.md"
+$secMdGh = Join-Path $RootDir.FullName ".github\SECURITY.md"
+if (-not (Test-Path -LiteralPath $secMdRoot -PathType Leaf) -and -not (Test-Path -LiteralPath $secMdGh -PathType Leaf)) {
+    Add-Finding $Findings $Seen "YELLOW" "SEC-YEL-007" "Missing root SECURITY.md vulnerability disclosure policy" "NIST SSDF / IETF RFC 9116" "SECURITY.md" 1 "Neither SECURITY.md nor .github/SECURITY.md exists"
+}
+
+$Reds = @($Findings | Where-Object { $_.severity -eq "RED" })
+$Yellows = @($Findings | Where-Object { $_.severity -eq "YELLOW" })
+
+if ($Format -eq "json") {
+    $payload = [ordered]@{
+        target        = $RootDir.FullName
+        files_scanned = $FilesScanned
+        counts        = [ordered]@{
+            red    = $Reds.Count
+            yellow = $Yellows.Count
+        }
+        red           = $Reds
+        yellow        = $Yellows
+    }
+    $payload | ConvertTo-Json -Depth 6
+} else {
+    $out = [System.Collections.Generic.List[string]]::new()
+    $out.Add("# Pre-Scan Results: $($RootDir.Name)")
+    $out.Add("")
+    $out.Add("## Summary")
+    $out.Add("- **Files inspected:** $FilesScanned")
+    $out.Add("- **Counts:** $($Reds.Count) Red, $($Yellows.Count) Yellow")
+    $out.Add("")
+    $out.Add("## Red Vulnerabilities")
+    if ($Reds.Count -eq 0) {
+        $out.Add("None found by static pre-scanner.")
+    } else {
+        for ($i = 0; $i -lt $Reds.Count; $i++) {
+            $f = $Reds[$i]
+            $out.Add("$($i + 1). **[RED] ``$($f.rule_id)`` — $($f.title)**")
+            $out.Add("   - **Standard:** $($f.standard)")
+            $out.Add("   - **Location:** ``$($f.file):$($f.line)``")
+            $out.Add("   - **Evidence:** ``$($f.evidence)``")
+        }
+    }
+    $out.Add("")
+    $out.Add("## Yellow Vulnerabilities")
+    if ($Yellows.Count -eq 0) {
+        $out.Add("None found by static pre-scanner.")
+    } else {
+        for ($i = 0; $i -lt $Yellows.Count; $i++) {
+            $f = $Yellows[$i]
+            $out.Add("$($i + 1). **[YELLOW] ``$($f.rule_id)`` — $($f.title)**")
+            $out.Add("   - **Standard:** $($f.standard)")
+            $out.Add("   - **Location:** ``$($f.file):$($f.line)``")
+            $out.Add("   - **Evidence:** ``$($f.evidence)``")
+        }
+    }
+    $out -join "`n"
+}
+
+if ($ExitCode) {
+    if ($Reds.Count -gt 0) { exit 2 }
+    if ($Yellows.Count -gt 0) { exit 1 }
+}
+exit 0
