@@ -276,7 +276,8 @@ function Invoke-ScanFile {
 
     $lines = $content -split "`r?`n"
     $bundleOnly = Test-BuiltBundlePath $RelPosix
-    $docOnly = $DocExts.Contains($ext)
+    $isPipReq = ($ext -eq ".txt") -and ($lowName.StartsWith("requirements") -or $lowName.StartsWith("constraints"))
+    $docOnly = $DocExts.Contains($ext) -and -not $isPipReq
     $lowRel = $RelPosix.ToLowerInvariant()
     $workflow = $lowRel.StartsWith(".github/workflows/") -and ($lowRel.EndsWith(".yml") -or $lowRel.EndsWith(".yaml"))
     $dockerfile = ($lowName -eq "dockerfile") -or $lowName.StartsWith("dockerfile.") -or $lowName.EndsWith(".dockerfile")

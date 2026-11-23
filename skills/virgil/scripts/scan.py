@@ -362,7 +362,9 @@ def scan_file(
 
     lines = content.splitlines()
     bundle_only = is_built_bundle_path(rel_posix)
-    doc_only = ext in DOC_EXTS
+    low_name = name.lower()
+    is_pip_req = ext == ".txt" and (low_name.startswith("requirements") or low_name.startswith("constraints"))
+    doc_only = ext in DOC_EXTS and not is_pip_req
     workflow = is_workflow_file(rel_posix)
     dockerfile = is_dockerfile(name)
     iac_cfg = is_iac_or_config(rel_posix)
