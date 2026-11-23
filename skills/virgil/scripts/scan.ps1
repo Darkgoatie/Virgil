@@ -6,7 +6,8 @@ param(
     [ValidateSet("markdown", "json")]
     [string]$Format = "markdown",
 
-    [switch]$ExitCode
+    [switch]$ExitCode,
+    [switch]$IncludeOptional
 )
 
 Set-StrictMode -Version Latest
@@ -119,6 +120,23 @@ $HtmlExts = [System.Collections.Generic.HashSet[string]]::new([System.StringComp
 
 $CodeRegexExts = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
 @('.js', '.ts', '.jsx', '.tsx', '.mjs', '.cjs', '.py', '.rb', '.php', '.java', '.cs', '.go') | ForEach-Object { [void]$CodeRegexExts.Add($_) }
+
+$JsTsExts = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+@('.js', '.ts', '.jsx', '.tsx', '.mjs') | ForEach-Object { [void]$JsTsExts.Add($_) }
+
+$FirebaseRulesNames = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+@('firestore.rules', 'storage.rules', 'database.rules.json') | ForEach-Object { [void]$FirebaseRulesNames.Add($_) }
+
+$ReSecurityDefiner = [regex]::new('\bSECURITY\s+DEFINER\b', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+$ReSetSearchPath = [regex]::new('\bSET\s+search_path\b', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+$ReFbAnyAllow = [regex]::new('\ballow\s+[^;]*:\s*if\s+true\b')
+$ReFbAuthOnly = [regex]::new('request\.auth\s*!=\s*null')
+$ReFbOwnership = [regex]::new('(?:resource\.data|request\.auth\.uid\s*==|uid\s*==|isOwner|hasRole|get\()')
+$ReTrojanBidi = [regex]::new('[\u202a-\u202e\u2066-\u2069]')
+$ReExtractAll = [regex]::new('\.extractall\s*\(')
+$ReUnsafeXmlPy = [regex]::new('\b(?:xml\.etree\.ElementTree|xml\.dom\.minidom|xml\.sax)\.(?:parse|fromstring|parseString)\s*\(')
+$ReUseServer = [regex]::new('^\s*[''"]use server[''"]\s*;?\s*$')
+$ReAuthHint = [regex]::new('\b(?:auth|session|getUser|verifySession|currentUser|cookies|requireAuth|getServerSession)\b', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
 
 function Mask-Token {
     param([string]$Token)
@@ -270,6 +288,14 @@ function Invoke-ScanFile {
     $hasDockerUser = $false
     $inRunBlock = $false
     $runIndent = 0
+    $isServerActionFile = $false
+    if ($JsTsExts.Contains($ext)) {
+        $topLimit = [Math]::Min(5, $lines.Count) - 1
+        for ($k = 0; $k -le $topLimit; $k++) {
+            if ($ReUseServer.IsMatch($lines[$k])) { $isServerActionFile = $true; break }
+        }
+    }
+    $fileUsesDefusedXml = $content.Contains("defusedxml")
 
     for ($i = 0; $i -lt $lines.Count; $i++) {
         $idx = $i + 1
@@ -342,11 +368,36 @@ function Invoke-ScanFile {
         if ($ext -eq ".rs" -and $ReRustUnsafe.IsMatch($line)) {
             $prevLine = if ($i -ge 1) { $lines[$i - 1] } else { "" }
             if (-not $line.Contains("SAFETY:") -and -not $prevLine.Contains("SAFETY:")) {
-                Add-Finding $Findings $Seen "YELLOW" "SEC-YEL-010" "Rust unsafe block missing // SAFETY: invariant comment" "Google Safe Coding / CWE-119" $RelPosix $idx $line
+                Add-Finding $Findings $Seen "OPTIONAL" "SEC-OPT-001" "Rust unsafe block missing // SAFETY: invariant comment" "Google Safe Coding / CWE-119" $RelPosix $idx $line
             }
         }
         if ($CodeRegexExts.Contains($ext) -and $ReRedos.IsMatch($line)) {
             Add-Finding $Findings $Seen "YELLOW" "SEC-YEL-010" "Potential catastrophic ReDoS nested quantifier regex" "OWASP DoS / CWE-1333" $RelPosix $idx $line
+        }
+        if ($ext -eq ".sql" -and $ReSecurityDefiner.IsMatch($line)) {
+            $sqlStart = [Math]::Max(0, $i - 2)
+            $sqlEnd = [Math]::Min($lines.Count - 1, $i + 7)
+            $sqlWin = ($lines[$sqlStart..$sqlEnd]) -join "`n"
+            if (-not $ReSetSearchPath.IsMatch($sqlWin)) {
+                Add-Finding $Findings $Seen "RED" "SEC-RED-014" "PostgreSQL SECURITY DEFINER function missing SET search_path" "Supabase Security / CWE-426" $RelPosix $idx $line
+            }
+        }
+        if ($FirebaseRulesNames.Contains($lowName)) {
+            $fbStart = [Math]::Max(0, $i - 1)
+            $fbEnd = [Math]::Min($lines.Count - 1, $i + 1)
+            $fbWin = ($lines[$fbStart..$fbEnd]) -join "`n"
+            if ($ReFbAnyAllow.IsMatch($line) -or ($ReFbAuthOnly.IsMatch($line) -and -not $ReFbOwnership.IsMatch($fbWin))) {
+                Add-Finding $Findings $Seen "RED" "SEC-RED-014" "Overly permissive Firebase security rule missing ownership check" "Firebase Security Rules / CWE-285" $RelPosix $idx $line
+            }
+        }
+        if ($ReTrojanBidi.IsMatch($line)) {
+            Add-Finding $Findings $Seen "RED" "SEC-RED-015" "Trojan Source bidirectional Unicode control character in file" "CVE-2021-42574 / CWE-1007" $RelPosix $idx $line
+        }
+        if ($ReExtractAll.IsMatch($line) -and -not $line.Contains("filter=")) {
+            Add-Finding $Findings $Seen "RED" "SEC-RED-015" "Potential Zip Slip via unguarded archive extractall()" "OWASP File Handling / CWE-22" $RelPosix $idx $line
+        }
+        if ($ext -eq ".py" -and $ReUnsafeXmlPy.IsMatch($line) -and -not $fileUsesDefusedXml) {
+            Add-Finding $Findings $Seen "RED" "SEC-RED-015" "Unsafe Python XML parser susceptible to XXE / entity expansion" "OWASP XXE / CWE-611" $RelPosix $idx $line
         }
         if ($ReWeakCrypto.IsMatch($line)) {
             Add-Finding $Findings $Seen "YELLOW" "SEC-YEL-003" "Deprecated or weak cryptographic primitive" "OWASP A04:2025 / CWE-327 / CWE-328" $RelPosix $idx $line
@@ -414,6 +465,9 @@ function Invoke-ScanFile {
     if ($dockerfile -and -not $hasDockerUser) {
         Add-Finding $Findings $Seen "YELLOW" "SEC-YEL-002" "Dockerfile missing non-root USER directive" "OWASP Docker Cheat Sheet / CWE-250" $RelPosix 1 "No non-root USER instruction found"
     }
+    if ($isServerActionFile -and -not $ReAuthHint.IsMatch($content)) {
+        Add-Finding $Findings $Seen "YELLOW" "SEC-YEL-011" "Next.js Server Action file missing explicit auth or session verification" "Vercel / Next.js Security / CWE-862" $RelPosix 1 "File uses 'use server' without visible auth/session check"
+    }
 }
 
 if (-not (Test-Path -LiteralPath $Path -PathType Container)) {
@@ -460,6 +514,7 @@ if (-not (Test-Path -LiteralPath $secMdRoot -PathType Leaf) -and -not (Test-Path
 
 $Reds = @($Findings | Where-Object { $_.severity -eq "RED" })
 $Yellows = @($Findings | Where-Object { $_.severity -eq "YELLOW" })
+$Optionals = @($Findings | Where-Object { $_.severity -eq "OPTIONAL" })
 
 if ($Format -eq "json") {
     $payload = [ordered]@{
@@ -471,6 +526,9 @@ if ($Format -eq "json") {
         }
         red           = $Reds
         yellow        = $Yellows
+    }
+    if ($IncludeOptional) {
+        $payload["optional"] = $Optionals
     }
     $payload | ConvertTo-Json -Depth 6
 } else {
@@ -504,6 +562,21 @@ if ($Format -eq "json") {
             $out.Add("   - **Standard:** $($f.standard)")
             $out.Add("   - **Location:** ``$($f.file):$($f.line)``")
             $out.Add("   - **Evidence:** ``$($f.evidence)``")
+        }
+    }
+    if ($IncludeOptional) {
+        $out.Add("")
+        $out.Add("## Optional Recommendations (Not Vulnerabilities)")
+        if ($Optionals.Count -eq 0) {
+            $out.Add("None flagged by static pre-scanner.")
+        } else {
+            for ($i = 0; $i -lt $Optionals.Count; $i++) {
+                $f = $Optionals[$i]
+                $out.Add("$($i + 1). **[OPTIONAL] ``$($f.rule_id)`` — $($f.title)**")
+                $out.Add("   - **Standard:** $($f.standard)")
+                $out.Add("   - **Location:** ``$($f.file):$($f.line)``")
+                $out.Add("   - **Evidence:** ``$($f.evidence)``")
+            }
         }
     }
     $out -join "`n"

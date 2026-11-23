@@ -94,7 +94,7 @@ pwsh -NoProfile -File skills/virgil/scripts/scan.ps1 -Path C:\path\to\repo
 pwsh -NoProfile -File skills/virgil/scripts/scan.ps1 -Path C:\path\to\repo -Format json -ExitCode
 ```
 
-With `--exit-code` (`-ExitCode`), the scanner exits `2` when `[RED]` findings exist, `1` when only `[YELLOW]` findings exist, and `0` when clean. Without that flag, it exits `0` so agents can parse findings seamlessly. Matched secrets are always masked (`sk_l****abcd`).
+With `--exit-code` (`-ExitCode`), the scanner exits `2` when `[RED]` findings exist, `1` when only `[YELLOW]` findings exist, and `0` when clean. Pass `--include-optional` (`-IncludeOptional`) to print advisory `[OPTIONAL]` recommendations separately without counting them as vulnerabilities. Matched secrets are always masked (`sk_l****abcd`).
 
 ---
 
@@ -172,6 +172,10 @@ Virgil/
    - **Location:** `.github/workflows/ci.yml:12`
    - **Evidence:** `uses: actions/checkout@v4`
    - **Remediation:** Pin to the immutable 40-character commit SHA with a version comment.
+
+## Optional Recommendations
+*(Advisory / enterprise-scale hardening only; not counted as vulnerabilities.)*
+- **[OPTIONAL] Multi-Account Isolation:** Separate staging and production cloud accounts with SCP guardrails when scaling past single-project environments.
 
 ## Unverified / Out-of-Repo Gaps
 - Live Supabase RLS policies and S3 Block Public Access account settings reside outside this repository.

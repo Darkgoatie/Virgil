@@ -27,8 +27,8 @@
 
 ## 5. Safe Observability, Errors, Privacy & Data Sanitization
 - `[YELLOW]` **Log & Error Leakage (`CWE-532`, `CWE-209`):** Emit structured JSON logs scrubbed at centralized middleware/serializers to drop `Authorization`, cookies, session IDs, passwords, keys, and PII (including inside exception objects). Return generic **RFC 7807** Problem Details with opaque correlation IDs; keep `DEBUG=false` and traces strictly server-side.
-- `[YELLOW]` **Privacy Engineering & Data Lifecycle (Microsoft SDL Privacy / Google):** Enforce data minimization, explicit consent/purpose binding, automated retention TTLs, and end-to-end DSR (Data Subject Request) export/erasure propagation across primary DBs, caches, backups, logs, and vector/RAG indices.
-- `[YELLOW]` **Data Sanitization (NIST SP 800-88 Rev. 2):** Encrypt backups/snapshots with separated KMS keys and align decommissioning with **Purge** (Block Erase / Cryptographic Erase with zero unencrypted copies and full key destruction) or **Destroy**.
+- `[YELLOW]` **Data Minimization, Retention & Non-Prod PII Hygiene:** Enforce data minimization, consent/purpose binding, and retention TTLs. Never seed staging, QA, or AI eval databases with raw production PII; use synthetic or anonymized datasets.
+- `[OPTIONAL]` **Formal Media Sanitization, Multi-Store DSR & PQC Readiness:** Align physical/cloud media decommissioning with **NIST SP 800-88 Rev. 2** (**Purge** / Cryptographic Erase with full key destruction), automate end-to-end DSR export/erasure propagation across DBs/caches/backups/logs/RAG indices, and maintain a Cryptographic Bill of Materials (CBOM) for **NIST PQC** migration (**FIPS 203 ML-KEM** hybrid `X25519+ML-KEM` for long-term confidentiality; **FIPS 204 ML-DSA** / **FIPS 205 SLH-DSA** signature roadmaps).
 
 ## Verification Checklist
 - Run `scan.py`/`scan.ps1` and `gitleaks`/`trufflehog` (`fetch-depth: 0`) across repo history and built client bundles; ensure zero raw credentials appear in output.

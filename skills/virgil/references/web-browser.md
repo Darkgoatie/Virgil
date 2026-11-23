@@ -23,31 +23,39 @@
   - `Strict-Transport-Security: max-age=63072000; includeSubDomains; preload` (RFC 6797, HTTPS only)
   - `X-Content-Type-Options: nosniff`
   - `X-Frame-Options: DENY` (legacy fallback paired with `frame-ancestors 'none'`)
-  - `Cross-Origin-Opener-Policy: same-origin`
-  - `Cross-Origin-Resource-Policy: same-origin` (and `Cross-Origin-Embedder-Policy: require-corp` when full isolation is required)
+  - `Cross-Origin-Resource-Policy: same-origin` (or `same-site` / `cross-origin` for intentional public CDN assets)
   - `Referrer-Policy: strict-origin-when-cross-origin` (`no-referrer` on auth/reset routes)
   - `Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()`
+- `[OPTIONAL]` **Full Cross-Origin Isolation (`COOP`/`COEP`):** `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp` when `SharedArrayBuffer` or high-precision Spectre isolation is required.
 
 ## 5. Session Management, Cookies & CSRF
 - `[RED]` **Session Hijacking / Fixation (`CWE-384`, `A07:2025`):** Generate opaque session IDs with >=128 bits CSPRNG entropy; never place session tokens in URLs or `localStorage`. Rotate/regenerate session IDs immediately upon login, MFA step-up, and privilege escalation, and destroy server-side state on logout.
 - `[RED]` **Missing CSRF Protection (`CWE-352`):** Require Synchronizer CSRF tokens on state-changing cookie-authenticated endpoints (plus Fetch Metadata `Sec-Fetch-Site` blocking unexpected `cross-site` mutations with `403`). Never perform state mutations on `GET` requests.
 - `[YELLOW]` **Weak Cookie Attributes (RFC 6265bis):** Prefer the `__Host-` cookie prefix: `Set-Cookie: __Host-session_id=<TOKEN>; Secure; HttpOnly; SameSite=Lax; Path=/` (must omit `Domain`; use `SameSite=Strict` for admin panels).
 
-## 6. SSRF, Redirects, Path Traversal & File Uploads
-- `[RED]` **SSRF (`CWE-918`, `A01:2025`):** Never fetch arbitrary user URLs directly. Allowlist `https://`/`http://` and trusted domains via a standard URL parser, **disable HTTP redirects**, resolve DNS at connect time blocking loopback (`127.0.0.0/8`, `::1`), link-local/metadata (`169.254.0.0/16`, `fe80::/10`), and RFC 1918/ULA ranges via an isolated egress proxy, and never return raw upstream responses.
+## 6. SSRF, Redirects, Path Traversal, Archives, XML & Exports
+- `[RED]` **SSRF & PDF Renderer SSRF (`CWE-918`, `A01:2025`):** Never fetch arbitrary user URLs directly, including inside HTML-to-PDF renderers (Puppeteer, `wkhtmltopdf`, ReportLab). Allowlist `https://`/`http://` and trusted domains via a standard URL parser, **disable HTTP redirects**, resolve DNS at connect time blocking `file://`, loopback (`127.0.0.0/8`, `::1`), link-local/metadata (`169.254.0.0/16`, `fe80::/10`), and RFC 1918/ULA ranges via an isolated egress proxy, and never return raw upstream responses.
 - `[RED]` **Open Redirect (`CWE-601`):** Map opaque IDs to server-side destinations, or allow only relative paths starting with a single `/` (rejecting `//` and `/\`) or exact hostname allowlists.
-- `[RED]` **Path Traversal (`CWE-22`):** Reference stored files by server UUIDs. Where paths are required, decode once, canonicalize (`realpath` / `Path.normalize().toAbsolutePath()`), and enforce strict canonical base-directory prefix containment.
-- `[RED]` **Unsafe File Upload (`CWE-434`):** Validate magic bytes + strict extension allowlist (do not trust `Content-Type` or accept active `.svg`/`.html` served inline same-origin), re-encode/CDR untrusted images/docs, rename to UUIDs, enforce byte size + decompression-bomb limits, and store outside web root on an isolated non-executable sandbox origin with `Content-Disposition: attachment` and `X-Content-Type-Options: nosniff`.
+- `[RED]` **Path Traversal & Zip Slip (`CWE-22`):** Reference stored files by server UUIDs. Where paths or archive extractions (`.zip`/`.tar` `extractall`) are required, decode once, canonicalize (`realpath` / `Path.normalize().toAbsolutePath()`), and enforce strict canonical base-directory prefix containment on every archive entry before writing.
+- `[RED]` **XXE & Unsafe File Upload (`CWE-611`, `CWE-434`):** Disable DTDs and external entities (`defusedxml`, `disallow-doctype-decl`) in all XML/SAML/SVG/DOCX parsers. Validate magic bytes + strict extension allowlist (do not trust `Content-Type` or accept active `.svg`/`.html` served inline same-origin), re-encode/CDR untrusted images/docs, rename to UUIDs, enforce byte size + decompression-bomb limits, and store outside web root on an isolated non-executable sandbox origin with `Content-Disposition: attachment` and `X-Content-Type-Options: nosniff`.
+- `[YELLOW]` **CSV / Spreadsheet Formula Injection (`CWE-1236`):** Prefix or escape exported cell strings starting with `=`, `+`, `-`, `@`, `\t`, or `\r` before generating CSV/XLSX downloads.
+- `[YELLOW]` **Unicode Normalization & Trojan Source (`CWE-172`):** Apply consistent `NFKC` normalization *before* allowlist/uniqueness/authz checks (preventing homoglyph bypasses), and reject bidirectional override characters (`U+202A`–`U+202E`, `U+2066`–`U+2069`) in source files.
 
 ## 7. Client Trust, Electron / Webviews & TLS Edge
 - `[RED]` **Client Trust Inversion (`A01:2025`):** Re-validate all inputs, pricing, state transitions, and authorization server-side; never treat UI route guards or hidden form fields as security boundaries.
 - `[RED]` **Insecure Electron / Desktop Webviews:** Explicitly enforce `nodeIntegration: false`, `contextIsolation: true`, `sandbox: true`, and `webSecurity: true`. Never expose raw `ipcRenderer` via `contextBridge`; validate IPC senders/arguments in Main, block `will-navigate`/`setWindowOpenHandler`, and allowlist `https://` in `shell.openExternal()`.
 - `[RED]` / `[YELLOW]` **TLS & Reverse Proxy Edge:** Reject TLS 1.0/1.1 (`[RED]`); enforce TLS 1.3 and AEAD-only TLS 1.2 (`[YELLOW]` if weak TLS 1.2 suites remain), terminate TLS at proxy/WAF with HTTP->HTTPS `301`, Slowloris timeouts, and TLS/mTLS re-encryption to private origin backends.
 
-## 8. DNS, Domain, Email & Edge Protection (Cloudflare / Google / Microsoft)
+## 8. Full-Stack SSR, RSC & Server Actions (Next.js / Vercel)
+- `[RED]` **RSC Prop Serialization Leakage:** Never pass raw database/ORM user or tenant objects from React Server Components to Client Components; shape minimal DTOs server-side so internal flags or hashes do not serialize into RSC payloads.
+- `[RED]` **Unauthenticated Server Actions (`'use server'`):** Every Server Action is directly `POST`-reachable. Validate session authentication, authorization, and strict input schemas (e.g., Zod) inside every Server Action and centralized Data Access Layer (DAL)—never rely on hidden UI buttons.
+- `[YELLOW]` **Missing `server-only` Guard:** Import `'server-only'` in DB/ORM/secret DAL modules in Next.js App Router so accidental Client Component imports fail at build time.
+
+## 9. DNS, Domain, Email, WebRTC & Edge Protection (Cloudflare / Google / ASVS V17)
 - `[RED]` **Cloudflare `Flexible` TLS & Dangling DNS / Subdomain Takeover:** Never run reverse-proxy/CDN edge TLS in `Flexible` mode (leaves edge-to-origin plaintext); enforce **`Full (Strict)`** with verified origin certificates. Audit and remove orphaned `CNAME`/`A` records pointing to decommissioned cloud services (S3, Heroku, GitHub Pages, Azure) to prevent subdomain takeover (`CWE-350`).
-- `[YELLOW]` **Subresource Integrity (SRI) on Third-Party Scripts:** Require cryptographic `integrity="sha384-..."` and `crossorigin="anonymous"` on all external CDN `<script>`/`<link>` tags (mandatory on auth and payment pages under PCI-DSS v4.0).
-- `[YELLOW]` **Email Auth (SPF, DKIM, DMARC), DNSSEC & CAA:** Configure **SPF** (staying within 10 DNS lookups), **DKIM** cryptographic signing, and enforced **DMARC (`p=reject`)** on domains sending transactional mail to prevent spoofing/BEC. Enable **DNSSEC** (registrar DS record) and **CAA** records restricting which CAs may issue certificates for your domain, alongside edge DDoS and Bot Management on auth/checkout routes.
+- `[RED]` **WebRTC / TURN Relay SSRF (ASVS V17):** When running WebRTC TURN relays, require ephemeral HMAC credentials and block peer connections to loopback, link-local (`169.254.0.0/16`), and private RFC 1918 subnets.
+- `[YELLOW]` **Subresource Integrity (SRI) & Transactional Email Auth:** Require cryptographic `integrity="sha384-..."` and `crossorigin="anonymous"` on external CDN `<script>`/`<link>` tags. Configure **SPF** (<=10 DNS lookups), **DKIM**, and enforced **DMARC (`p=reject`)** on domains sending transactional mail.
+- `[OPTIONAL]` **DNSSEC, CAA, Edge Bot Defense & Proxy Desync/Cache Audits:** Enable **DNSSEC** (registrar DS record) and **CAA** certificate restrictions, configure edge DDoS/Bot Management on auth/checkout routes, and audit CDN-to-origin hops for HTTP Request Smuggling (`CL.TE`/`TE.CL`) and Web Cache Poisoning / Cache Deception (`/profile.css` path confusion, unkeyed `X-Forwarded-Host`).
 
 ## Verification Checklist
 - Run `scan.py`/`scan.ps1` across both source and compiled frontend bundles (`dist/`, `.next/`, `build/`).

@@ -165,6 +165,24 @@ RE_REDOS = re.compile(r"(?:new\s+RegExp|re\.compile)\s*\([^)]*\([^)]*[+*][^)]*\)
 
 HTML_EXTS = {".html", ".htm", ".ejs", ".hbs", ".jinja", ".j2", ".twig", ".vue", ".svelte", ".astro"}
 CODE_REGEX_EXTS = {".js", ".ts", ".jsx", ".tsx", ".mjs", ".cjs", ".py", ".rb", ".php", ".java", ".cs", ".go"}
+JS_TS_EXTS = {".js", ".ts", ".jsx", ".tsx", ".mjs"}
+FIREBASE_RULES_NAMES = {"firestore.rules", "storage.rules", "database.rules.json"}
+
+RE_SECURITY_DEFINER = re.compile(r"\bSECURITY\s+DEFINER\b", re.IGNORECASE)
+RE_SET_SEARCH_PATH = re.compile(r"\bSET\s+search_path\b", re.IGNORECASE)
+RE_FB_ANY_ALLOW = re.compile(r"\ballow\s+[^;]*:\s*if\s+true\b")
+RE_FB_AUTH_ONLY = re.compile(r"request\.auth\s*!=\s*null")
+RE_FB_OWNERSHIP = re.compile(r"(?:resource\.data|request\.auth\.uid\s*==|uid\s*==|isOwner|hasRole|get\()")
+RE_TROJAN_BIDI = re.compile(r"[\u202a-\u202e\u2066-\u2069]")
+RE_EXTRACTALL = re.compile(r"\.extractall\s*\(")
+RE_UNSAFE_XML_PY = re.compile(
+    r"\b(?:xml\.etree\.ElementTree|xml\.dom\.minidom|xml\.sax)\.(?:parse|fromstring|parseString)\s*\("
+)
+RE_USE_SERVER = re.compile(r"^\s*['\"]use server['\"]\s*;?\s*$")
+RE_AUTH_HINT = re.compile(
+    r"\b(?:auth|session|getUser|verifySession|currentUser|cookies|requireAuth|getServerSession)\b",
+    re.IGNORECASE,
+)
 
 
 @dataclass
@@ -354,6 +372,8 @@ def scan_file(
     has_docker_user = False
     in_run_block = False
     run_indent = 0
+    is_server_action_file = ext in JS_TS_EXTS and any(RE_USE_SERVER.match(l) for l in lines[:5])
+    file_uses_defusedxml = "defusedxml" in content
 
     for idx, line in enumerate(lines, start=1):
         if scan_secret_patterns(line):
@@ -571,8 +591,8 @@ def scan_file(
                 add_finding(
                     findings,
                     seen,
-                    "YELLOW",
-                    "SEC-YEL-010",
+                    "OPTIONAL",
+                    "SEC-OPT-001",
                     "Rust unsafe block missing // SAFETY: invariant comment",
                     "Google Safe Coding / CWE-119",
                     rel_posix,
@@ -588,6 +608,75 @@ def scan_file(
                 "SEC-YEL-010",
                 "Potential catastrophic ReDoS nested quantifier regex",
                 "OWASP DoS / CWE-1333",
+                rel_posix,
+                idx,
+                line,
+            )
+
+        if ext == ".sql" and RE_SECURITY_DEFINER.search(line):
+            sql_win = "\n".join(lines[max(0, idx - 3) : min(len(lines), idx + 8)])
+            if not RE_SET_SEARCH_PATH.search(sql_win):
+                add_finding(
+                    findings,
+                    seen,
+                    "RED",
+                    "SEC-RED-014",
+                    "PostgreSQL SECURITY DEFINER function missing SET search_path",
+                    "Supabase Security / CWE-426",
+                    rel_posix,
+                    idx,
+                    line,
+                )
+
+        if low_name in FIREBASE_RULES_NAMES:
+            fb_win = "\n".join(lines[max(0, idx - 2) : min(len(lines), idx + 2)])
+            if RE_FB_ANY_ALLOW.search(line) or (RE_FB_AUTH_ONLY.search(line) and not RE_FB_OWNERSHIP.search(fb_win)):
+                add_finding(
+                    findings,
+                    seen,
+                    "RED",
+                    "SEC-RED-014",
+                    "Overly permissive Firebase security rule missing ownership check",
+                    "Firebase Security Rules / CWE-285",
+                    rel_posix,
+                    idx,
+                    line,
+                )
+
+        if RE_TROJAN_BIDI.search(line):
+            add_finding(
+                findings,
+                seen,
+                "RED",
+                "SEC-RED-015",
+                "Trojan Source bidirectional Unicode control character in file",
+                "CVE-2021-42574 / CWE-1007",
+                rel_posix,
+                idx,
+                line,
+            )
+
+        if RE_EXTRACTALL.search(line) and "filter=" not in line:
+            add_finding(
+                findings,
+                seen,
+                "RED",
+                "SEC-RED-015",
+                "Potential Zip Slip via unguarded archive extractall()",
+                "OWASP File Handling / CWE-22",
+                rel_posix,
+                idx,
+                line,
+            )
+
+        if ext == ".py" and RE_UNSAFE_XML_PY.search(line) and not file_uses_defusedxml:
+            add_finding(
+                findings,
+                seen,
+                "RED",
+                "SEC-RED-015",
+                "Unsafe Python XML parser susceptible to XXE / entity expansion",
+                "OWASP XXE / CWE-611",
                 rel_posix,
                 idx,
                 line,
@@ -783,6 +872,19 @@ def scan_file(
             "No non-root USER instruction found",
         )
 
+    if is_server_action_file and not RE_AUTH_HINT.search(content):
+        add_finding(
+            findings,
+            seen,
+            "YELLOW",
+            "SEC-YEL-011",
+            "Next.js Server Action file missing explicit auth or session verification",
+            "Vercel / Next.js Security / CWE-862",
+            rel_posix,
+            1,
+            "File uses 'use server' without visible auth/session check",
+        )
+
 
 def walk_repo(root: Path) -> Iterable[tuple[Path, str]]:
     for dirpath, dirnames, filenames in os.walk(root):
@@ -804,9 +906,10 @@ def walk_repo(root: Path) -> Iterable[tuple[Path, str]]:
             yield fpath, rel_posix
 
 
-def render_markdown(repo_name: str, files_scanned: int, findings: list[Finding]) -> str:
+def render_markdown(repo_name: str, files_scanned: int, findings: list[Finding], include_optional: bool) -> str:
     reds = [f for f in findings if f.severity == "RED"]
     yellows = [f for f in findings if f.severity == "YELLOW"]
+    optionals = [f for f in findings if f.severity == "OPTIONAL"] if include_optional else []
     lines = [
         f"# Pre-Scan Results: {repo_name}",
         "",
@@ -837,6 +940,18 @@ def render_markdown(repo_name: str, files_scanned: int, findings: list[Finding])
                 f"   - **Location:** `{f.file}:{f.line}`",
                 f"   - **Evidence:** `{f.evidence}`",
             ])
+    if include_optional:
+        lines.extend(["", "## Optional Recommendations (Not Vulnerabilities)"])
+        if not optionals:
+            lines.append("None flagged by static pre-scanner.")
+        else:
+            for idx, f in enumerate(optionals, start=1):
+                lines.extend([
+                    f"{idx}. **[OPTIONAL] `{f.rule_id}` — {f.title}**",
+                    f"   - **Standard:** {f.standard}",
+                    f"   - **Location:** `{f.file}:{f.line}`",
+                    f"   - **Evidence:** `{f.evidence}`",
+                ])
     return "\n".join(lines)
 
 
@@ -845,6 +960,7 @@ def main() -> int:
     parser.add_argument("target", nargs="?", default=".", help="Target repository directory")
     parser.add_argument("--format", choices=["markdown", "json"], default="markdown")
     parser.add_argument("--exit-code", action="store_true", help="Exit 2 on Red, 1 on Yellow only, 0 on clean")
+    parser.add_argument("--include-optional", action="store_true", help="Include advisory [OPTIONAL] recommendations")
     args = parser.parse_args()
 
     root = Path(args.target).resolve()
@@ -875,6 +991,7 @@ def main() -> int:
 
     reds = [f for f in findings if f.severity == "RED"]
     yellows = [f for f in findings if f.severity == "YELLOW"]
+    optionals = [f for f in findings if f.severity == "OPTIONAL"]
 
     if args.format == "json":
         payload = {
@@ -884,9 +1001,11 @@ def main() -> int:
             "red": [asdict(f) for f in reds],
             "yellow": [asdict(f) for f in yellows],
         }
+        if args.include_optional:
+            payload["optional"] = [asdict(f) for f in optionals]
         print(json.dumps(payload, indent=2))
     else:
-        print(render_markdown(root.name, files_scanned, findings))
+        print(render_markdown(root.name, files_scanned, findings, args.include_optional))
 
     if args.exit_code:
         if reds:
