@@ -219,6 +219,10 @@ RE_DB_OS_EXEC = re.compile(
     r"(?:\bxp_cmdshell\b|\bCOPY\b[^;\r\n]+\b(?:FROM|TO)\s+PROGRAM\b)",
     re.IGNORECASE,
 )
+RE_WEAK_JWT_SECRET = re.compile(
+    r"\bjwt_?secret\b\s*[:=]\s*['\"]?(?:secret|changeme|dev[-_]?secret|test[-_]?secret|123456|default|mysecret)['\"]?(?:\s|$|,|;|#)",
+    re.IGNORECASE,
+)
 
 
 @dataclass
@@ -374,6 +378,24 @@ def scan_file(
             rel_posix,
             1,
             f"Terraform state file present: {rel_posix}",
+        )
+        return
+
+    if (
+        low_name.endswith(".postman_collection.json")
+        or low_name.endswith(".postman_environment.json")
+        or (low_name.startswith("insomnia") and low_name.endswith(".json"))
+    ):
+        add_finding(
+            findings,
+            seen,
+            "RED",
+            "SEC-RED-025",
+            "API client collection/environment file committed (risks live tokens and internal routes)",
+            "OWASP API9 / CWE-312",
+            rel_posix,
+            1,
+            f"API collection file present: {rel_posix}",
         )
         return
 
@@ -860,6 +882,19 @@ def scan_file(
                 "SEC-RED-024",
                 "Dangerous database-to-host OS execution primitive (xp_cmdshell / COPY PROGRAM)",
                 "OWASP A05:2025 / CWE-250",
+                rel_posix,
+                idx,
+                line,
+            )
+
+        if low_name not in SAFE_ENV_FILES and RE_WEAK_JWT_SECRET.search(line):
+            add_finding(
+                findings,
+                seen,
+                "RED",
+                "SEC-RED-026",
+                "Weak or hardcoded JWT signing secret",
+                "OWASP A04:2025 / CWE-798",
                 rel_posix,
                 idx,
                 line,

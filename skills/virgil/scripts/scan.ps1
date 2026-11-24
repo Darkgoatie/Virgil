@@ -156,6 +156,7 @@ $ReDefaultCred = [regex]::new('\b(?:admin_?password|root_?password|default_?pass
 $ReCiLogTrace = [regex]::new('(?:\bset\s+(?:-[a-zA-Z]*x|-o\s+xtrace)\b|(?:^|\s|;|&|\|)(?:printenv|env)\s*(?:$|[;#|&>]))')
 $ReDockerPortDb = [regex]::new('^\s*-\s*[''"]?(?:0\.0\.0\.0:)?(?:3306|5432|1433|1521|6379|27017|9200|11211):\d+[''"]?(?:\s|$|#)')
 $ReDbOsExec = [regex]::new('(?:\bxp_cmdshell\b|\bCOPY\b[^;\r\n]+\b(?:FROM|TO)\s+PROGRAM\b)', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+$ReWeakJwtSecret = [regex]::new('\bjwt_?secret\b\s*[:=]\s*[''"]?(?:secret|changeme|dev[-_]?secret|test[-_]?secret|123456|default|mysecret)[''"]?(?:\s|$|,|;|#)', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
 
 function Mask-Token {
     param([string]$Token)
@@ -270,6 +271,10 @@ function Invoke-ScanFile {
     }
     if ($lowName.EndsWith(".tfstate") -or $lowName.EndsWith(".tfstate.backup")) {
         Add-Finding $Findings $Seen "RED" "SEC-RED-022" "Terraform state file committed (risks plaintext DB/cloud credentials)" "OWASP A04:2025 / CWE-312" $RelPosix 1 "Terraform state file present: $RelPosix"
+        return
+    }
+    if ($lowName.EndsWith(".postman_collection.json") -or $lowName.EndsWith(".postman_environment.json") -or ($lowName.StartsWith("insomnia") -and $lowName.EndsWith(".json"))) {
+        Add-Finding $Findings $Seen "RED" "SEC-RED-025" "API client collection/environment file committed (risks live tokens and internal routes)" "OWASP API9 / CWE-312" $RelPosix 1 "API collection file present: $RelPosix"
         return
     }
 
@@ -453,6 +458,9 @@ function Invoke-ScanFile {
         }
         if ($SchemaCodeExts.Contains($ext) -and $ReDbOsExec.IsMatch($line)) {
             Add-Finding $Findings $Seen "RED" "SEC-RED-024" "Dangerous database-to-host OS execution primitive (xp_cmdshell / COPY PROGRAM)" "OWASP A05:2025 / CWE-250" $RelPosix $idx $line
+        }
+        if (-not $SafeEnvFiles.Contains($lowName) -and $ReWeakJwtSecret.IsMatch($line)) {
+            Add-Finding $Findings $Seen "RED" "SEC-RED-026" "Weak or hardcoded JWT signing secret" "OWASP A04:2025 / CWE-798" $RelPosix $idx $line
         }
         if ($ReWeakCrypto.IsMatch($line)) {
             Add-Finding $Findings $Seen "YELLOW" "SEC-YEL-003" "Deprecated or weak cryptographic primitive" "OWASP A04:2025 / CWE-327 / CWE-328" $RelPosix $idx $line
