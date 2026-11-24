@@ -150,6 +150,10 @@ $ReTrustProxyTrue = [regex]::new('(?:app\.set\s*\(\s*[''"]trust\s+proxy[''"]\s*,
 $ReActuatorExposed = [regex]::new('management\.endpoints\.web\.exposure\.include\s*[:=]\s*[''"]?(?:\*|[^#\r\n]*\b(?:heapdump|env|mappings)\b)', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
 $RePipExtraIndex = [regex]::new('--extra-[i]ndex-url(?:\s+|=)\S+', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
 $RePostMessageWildcard = [regex]::new('\.postMessage\s*\([^,\r\n]+,\s*[''"]\*[''"]\s*\)')
+$PublicDumpExts = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+@('.bak', '.sql', '.dump', '.old', '.orig') | ForEach-Object { [void]$PublicDumpExts.Add($_) }
+$ReDefaultCred = [regex]::new('\b(?:admin_?password|root_?password|default_?password|db_?password|postgres_?password|mysql_?root_?password|redis_?password|password|passwd)\b\s*[:=]\s*[''"]?(?:admin|password|123456|changeme|default|toor|root)[''"]?(?:\s|$|,|;|#)', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+$ReCiLogTrace = [regex]::new('(?:\bset\s+(?:-[a-zA-Z]*x|-o\s+xtrace)\b|(?:^|\s|;|&|\|)(?:printenv|env)\s*(?:$|[;#|&>]))')
 
 function Mask-Token {
     param([string]$Token)
@@ -256,6 +260,10 @@ function Invoke-ScanFile {
 
     if ((Test-PublicStaticPath $RelPosix) -and ($lowName.EndsWith(".js.map") -or $lowName.EndsWith(".css.map"))) {
         Add-Finding $Findings $Seen "YELLOW" "SEC-YEL-004" "Public production source map exposed" "OWASP A02:2025 / CWE-200" $RelPosix 1 "Source map file in web/bundle output: $RelPosix"
+        return
+    }
+    if ((Test-PublicStaticPath $RelPosix) -and $PublicDumpExts.Contains($ext)) {
+        Add-Finding $Findings $Seen "RED" "SEC-RED-020" "Backup or database dump file committed inside public web root" "OWASP A02:2025 / CWE-530" $RelPosix 1 "Backup/dump file in web/bundle output: $RelPosix"
         return
     }
 
@@ -431,6 +439,9 @@ function Invoke-ScanFile {
         if ($JsTsExts.Contains($ext) -and $RePostMessageWildcard.IsMatch($line)) {
             Add-Finding $Findings $Seen "YELLOW" "SEC-YEL-013" "window.postMessage called with wildcard '*' targetOrigin" "OWASP Client-Side / CWE-346" $RelPosix $idx $line
         }
+        if (-not $SafeEnvFiles.Contains($lowName) -and $ReDefaultCred.IsMatch($line)) {
+            Add-Finding $Findings $Seen "RED" "SEC-RED-021" "Hardcoded default or weak admin/service credential" "OWASP A07:2025 / CWE-798" $RelPosix $idx $line
+        }
         if ($ReWeakCrypto.IsMatch($line)) {
             Add-Finding $Findings $Seen "YELLOW" "SEC-YEL-003" "Deprecated or weak cryptographic primitive" "OWASP A04:2025 / CWE-327 / CWE-328" $RelPosix $idx $line
         }
@@ -447,6 +458,9 @@ function Invoke-ScanFile {
             if ($ReGhaRun.IsMatch($line)) {
                 $inRunBlock = $true
                 $runIndent = $indent
+            }
+            if ($inRunBlock -and $ReCiLogTrace.IsMatch($line)) {
+                Add-Finding $Findings $Seen "YELLOW" "SEC-YEL-014" "CI shell trace or environment dump risks leaking secrets into build logs" "OWASP CICD-SEC-1 / CWE-532" $RelPosix $idx $line
             }
             if ($ReGhaPrt.IsMatch($line)) {
                 Add-Finding $Findings $Seen "RED" "SEC-RED-010" "GitHub Actions pull_request_target privileged trigger" "OWASP CICD-SEC-1 / CICD-SEC-4" $RelPosix $idx $line

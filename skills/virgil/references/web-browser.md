@@ -7,7 +7,7 @@
 ## 2. Public Frontend Secrets, Bundles & Source Maps
 - `[RED]` **Privileged Keys in Public Env Vars or Built Bundles (`CWE-798`, `CWE-312`):** Build tools (`Next.js`, `Vite`, `Expo`, `CRA`, `Nuxt`) inline `NEXT_PUBLIC_*`, `VITE_*`, `EXPO_PUBLIC_*`, `REACT_APP_*`, and `NUXT_PUBLIC_*` into public client JavaScript. Never place `SERVICE_ROLE`, Stripe `sk_*`, OpenAI/Anthropic/Gemini API keys, DB URLs, or signing secrets in frontend code or public env prefixes. Proxy privileged third-party calls through backend endpoints.
 - `[RED]` **Client Public Keys Without Backend RLS/Rules:** Intentional public client identifiers (Supabase `anon`, Firebase web config, Stripe `pk_*`) must be backed by strict server-side authorization or database Row-Level Security / Firebase Security Rules; verify policies exist in the repo or flag as `[RED]`/`Unverified`.
-- `[RED]` **Web-Root `.env` or `.git` Exposure:** Never copy `.env*` or `.git/` into `public/`, `static/`, `dist/`, or Docker web roots served directly by Nginx/Apache/CDN.
+- `[RED]` **Web-Root `.env`, `.git` & Backup/Dump Exposure (`CWE-530`):** Never copy `.env*`, `.git/`, or backup/database dump files (`*.bak`, `*.sql`, `*.dump`, `*.old`, `*.orig`) into `public/`, `static/`, `www/`, `htdocs/`, `dist/`, or Docker web roots served directly by Nginx/Apache/CDN.
 - `[YELLOW]` **Public Production Source Maps (`*.js.map`, `*.css.map`):** Disable public source map emission (`productionBrowserSourceMaps: false`, Vite `build.sourcemap: false` or `'hidden'`) in production or upload `.map` files solely to private error-tracking storage.
 
 ## 3. Injection & Client-Side Execution
@@ -26,6 +26,7 @@
   - `Cross-Origin-Resource-Policy: same-origin` (or `same-site` / `cross-origin` for intentional public CDN assets)
   - `Referrer-Policy: strict-origin-when-cross-origin` (`no-referrer` on auth/reset routes)
   - `Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()`
+  - Strip framework/server fingerprinting headers (`X-Powered-By`, detailed `Server` versions; e.g., Express `app.disable('x-powered-by')` or `helmet.hidePoweredBy()`).
 - `[OPTIONAL]` **Full Cross-Origin Isolation (`COOP`/`COEP`):** `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp` when `SharedArrayBuffer` or high-precision Spectre isolation is required.
 
 ## 5. Session Management, Cookies & CSRF

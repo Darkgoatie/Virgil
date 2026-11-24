@@ -204,6 +204,14 @@ RE_ACTUATOR_EXPOSED = re.compile(
 )
 RE_PIP_EXTRA_INDEX = re.compile(r"--extra-[i]ndex-url(?:\s+|=)\S+", re.IGNORECASE)
 RE_POSTMESSAGE_WILDCARD = re.compile(r"\.postMessage\s*\([^,\r\n]+,\s*['\"]\*['\"]\s*\)")
+PUBLIC_DUMP_EXTS = {".bak", ".sql", ".dump", ".old", ".orig"}
+RE_DEFAULT_CRED = re.compile(
+    r"\b(?:admin_?password|root_?password|default_?password|db_?password|postgres_?password|mysql_?root_?password|redis_?password|password|passwd)\b\s*[:=]\s*['\"]?(?:admin|password|123456|changeme|default|toor|root)['\"]?(?:\s|$|,|;|#)",
+    re.IGNORECASE,
+)
+RE_CI_LOG_TRACE = re.compile(
+    r"(?:\bset\s+(?:-[a-zA-Z]*x|-o\s+xtrace)\b|(?:^|\s|;|&|\|)(?:printenv|env)\s*(?:$|[;#|&>]))"
+)
 
 
 @dataclass
@@ -331,6 +339,20 @@ def scan_file(
             rel_posix,
             1,
             f"Source map file in web/bundle output: {rel_posix}",
+        )
+        return
+
+    if is_public_static_path(rel_posix) and ext in PUBLIC_DUMP_EXTS:
+        add_finding(
+            findings,
+            seen,
+            "RED",
+            "SEC-RED-020",
+            "Backup or database dump file committed inside public web root",
+            "OWASP A02:2025 / CWE-530",
+            rel_posix,
+            1,
+            f"Backup/dump file in web/bundle output: {rel_posix}",
         )
         return
 
@@ -783,6 +805,19 @@ def scan_file(
                 line,
             )
 
+        if low_name not in SAFE_ENV_FILES and RE_DEFAULT_CRED.search(line):
+            add_finding(
+                findings,
+                seen,
+                "RED",
+                "SEC-RED-021",
+                "Hardcoded default or weak admin/service credential",
+                "OWASP A07:2025 / CWE-798",
+                rel_posix,
+                idx,
+                line,
+            )
+
         if RE_WEAK_CRYPTO.search(line):
             add_finding(
                 findings,
@@ -817,6 +852,18 @@ def scan_file(
             if RE_GHA_RUN.match(line):
                 in_run_block = True
                 run_indent = indent
+            if in_run_block and RE_CI_LOG_TRACE.search(line):
+                add_finding(
+                    findings,
+                    seen,
+                    "YELLOW",
+                    "SEC-YEL-014",
+                    "CI shell trace or environment dump risks leaking secrets into build logs",
+                    "OWASP CICD-SEC-1 / CWE-532",
+                    rel_posix,
+                    idx,
+                    line,
+                )
             if RE_GHA_PRT.search(line):
                 add_finding(
                     findings,
