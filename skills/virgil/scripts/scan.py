@@ -223,6 +223,13 @@ RE_WEAK_JWT_SECRET = re.compile(
     r"\bjwt_?secret\b\s*[:=]\s*['\"]?(?:secret|changeme|dev[-_]?secret|test[-_]?secret|123456|default|mysecret)['\"]?(?:\s|$|,|;|#)",
     re.IGNORECASE,
 )
+RE_DIR_LISTING = re.compile(
+    r"(?:\bautoindex\s+on\b|\bOptions\s+[^\r\n]*\+Indexes\b|\bserveIndex\s*\()",
+    re.IGNORECASE,
+)
+RE_PARENT_COOKIE_DOMAIN = re.compile(
+    r"(?:Domain=\.[A-Za-z0-9.-]+|\bdomain\s*:\s*['\"]\.[A-Za-z0-9.-]+['\"])"
+)
 
 
 @dataclass
@@ -895,6 +902,32 @@ def scan_file(
                 "SEC-RED-026",
                 "Weak or hardcoded JWT signing secret",
                 "OWASP A04:2025 / CWE-798",
+                rel_posix,
+                idx,
+                line,
+            )
+
+        if RE_DIR_LISTING.search(line):
+            add_finding(
+                findings,
+                seen,
+                "YELLOW",
+                "SEC-YEL-015",
+                "Directory listing enabled on web server or static middleware",
+                "OWASP A02:2025 / CWE-548",
+                rel_posix,
+                idx,
+                line,
+            )
+
+        if ext in CODE_REGEX_EXTS and RE_PARENT_COOKIE_DOMAIN.search(line):
+            add_finding(
+                findings,
+                seen,
+                "YELLOW",
+                "SEC-YEL-016",
+                "Cookie scoped to parent domain (exposes cookie to sibling subdomains)",
+                "OWASP Session Mgmt / CWE-1275",
                 rel_posix,
                 idx,
                 line,

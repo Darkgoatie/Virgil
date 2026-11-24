@@ -157,6 +157,8 @@ $ReCiLogTrace = [regex]::new('(?:\bset\s+(?:-[a-zA-Z]*x|-o\s+xtrace)\b|(?:^|\s|;
 $ReDockerPortDb = [regex]::new('^\s*-\s*[''"]?(?:0\.0\.0\.0:)?(?:3306|5432|1433|1521|6379|27017|9200|11211):\d+[''"]?(?:\s|$|#)')
 $ReDbOsExec = [regex]::new('(?:\bxp_cmdshell\b|\bCOPY\b[^;\r\n]+\b(?:FROM|TO)\s+PROGRAM\b)', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
 $ReWeakJwtSecret = [regex]::new('\bjwt_?secret\b\s*[:=]\s*[''"]?(?:secret|changeme|dev[-_]?secret|test[-_]?secret|123456|default|mysecret)[''"]?(?:\s|$|,|;|#)', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+$ReDirListing = [regex]::new('(?:\bautoindex\s+on\b|\bOptions\s+[^\r\n]*\+Indexes\b|\bserveIndex\s*\()', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+$ReParentCookieDomain = [regex]::new('(?:Domain=\.[A-Za-z0-9.-]+|\bdomain\s*:\s*[''"]\.[A-Za-z0-9.-]+[''"])')
 
 function Mask-Token {
     param([string]$Token)
@@ -461,6 +463,12 @@ function Invoke-ScanFile {
         }
         if (-not $SafeEnvFiles.Contains($lowName) -and $ReWeakJwtSecret.IsMatch($line)) {
             Add-Finding $Findings $Seen "RED" "SEC-RED-026" "Weak or hardcoded JWT signing secret" "OWASP A04:2025 / CWE-798" $RelPosix $idx $line
+        }
+        if ($ReDirListing.IsMatch($line)) {
+            Add-Finding $Findings $Seen "YELLOW" "SEC-YEL-015" "Directory listing enabled on web server or static middleware" "OWASP A02:2025 / CWE-548" $RelPosix $idx $line
+        }
+        if ($CodeRegexExts.Contains($ext) -and $ReParentCookieDomain.IsMatch($line)) {
+            Add-Finding $Findings $Seen "YELLOW" "SEC-YEL-016" "Cookie scoped to parent domain (exposes cookie to sibling subdomains)" "OWASP Session Mgmt / CWE-1275" $RelPosix $idx $line
         }
         if ($ReWeakCrypto.IsMatch($line)) {
             Add-Finding $Findings $Seen "YELLOW" "SEC-YEL-003" "Deprecated or weak cryptographic primitive" "OWASP A04:2025 / CWE-327 / CWE-328" $RelPosix $idx $line
