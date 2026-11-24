@@ -6,7 +6,7 @@
 
 **Portable security auditing and hardening skill for AI coding agents.**
 
-[![Version](https://img.shields.io/badge/version-1.5.0-2AB985?style=flat-square)](skills/virgil/VERSION)
+[![Version](https://img.shields.io/badge/version-1.6.0-2AB985?style=flat-square)](skills/virgil/VERSION)
 [![Spec](https://img.shields.io/badge/spec-Agent_Skills_(SKILL.md)-1F2937?style=flat-square)](https://agentskills.io/specification)
 [![Scanners](https://img.shields.io/badge/scanners-Python_%7C_PowerShell-1F2937?style=flat-square)](#running-a-security-audit)
 [![License](https://img.shields.io/badge/license-MIT-1F2937?style=flat-square)](LICENSE)
@@ -157,7 +157,7 @@ Virgil/
 └── skills/
     └── virgil/
         ├── SKILL.md                           # Severity rubric, Step 0-5 audit workflow, report contract
-        ├── VERSION                            # Semantic version (1.5.0)
+        ├── VERSION                            # Semantic version (1.6.0)
         ├── assets/
         │   └── icon.svg                       # Vector skill emblem
         ├── references/

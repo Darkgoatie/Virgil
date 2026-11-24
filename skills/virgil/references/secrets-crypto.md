@@ -1,7 +1,7 @@
 # Secrets Management, Cryptography & Data Protection
 
 ## 1. Secrets Classification & Public Frontend Leaks
-- `[RED]` **Hardcoded Credentials & Tracked Secret Files (`CWE-798`, `CWE-312`, `A04:2025`):** Never commit API keys, DB passwords, private keys (`*.pem`, `*.key`, `id_rsa`), service-account JSONs, or real `.env` files (`.env`, `.env.local`, `.env.production`). Only `.env.example` templates with obvious placeholders belong in VCS.
+- `[RED]` **Hardcoded Credentials, Tracked Secret Files & Terraform State (`CWE-798`, `CWE-312`, `A04:2025`):** Never commit API keys, DB passwords, private keys (`*.pem`, `*.key`, `id_rsa`), service-account JSONs, Terraform state files (`*.tfstate`, `*.tfstate.backup`), or real `.env` files (`.env`, `.env.local`, `.env.production`). Only `.env.example` templates with obvious placeholders belong in VCS; store IaC state remotely in KMS-encrypted buckets with strict IAM.
 - `[RED]` **Privileged Keys in Public Client Scope:** Distinguish intentionally public client keys from privileged secrets:
   - **Forbidden in client JS / `NEXT_PUBLIC_*` / `VITE_*` / `EXPO_PUBLIC_*` / `REACT_APP_*`:** Stripe `sk_*`/`rk_*`, Supabase `service_role`, OpenAI/Anthropic/Gemini/LLM keys, AWS IAM keys, DB connection strings, JWT signing secrets, webhook secrets.
   - **Public-by-design keys requiring server guards:** Stripe `pk_*`, Firebase client config, Supabase `anon` key. Whenever client-side `anon`/Firebase keys exist, verify strict database Row-Level Security or Security Rules are enforced.

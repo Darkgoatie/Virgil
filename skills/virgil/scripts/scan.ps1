@@ -154,6 +154,8 @@ $PublicDumpExts = [System.Collections.Generic.HashSet[string]]::new([System.Stri
 @('.bak', '.sql', '.dump', '.old', '.orig') | ForEach-Object { [void]$PublicDumpExts.Add($_) }
 $ReDefaultCred = [regex]::new('\b(?:admin_?password|root_?password|default_?password|db_?password|postgres_?password|mysql_?root_?password|redis_?password|password|passwd)\b\s*[:=]\s*[''"]?(?:admin|password|123456|changeme|default|toor|root)[''"]?(?:\s|$|,|;|#)', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
 $ReCiLogTrace = [regex]::new('(?:\bset\s+(?:-[a-zA-Z]*x|-o\s+xtrace)\b|(?:^|\s|;|&|\|)(?:printenv|env)\s*(?:$|[;#|&>]))')
+$ReDockerPortDb = [regex]::new('^\s*-\s*[''"]?(?:0\.0\.0\.0:)?(?:3306|5432|1433|1521|6379|27017|9200|11211):\d+[''"]?(?:\s|$|#)')
+$ReDbOsExec = [regex]::new('(?:\bxp_cmdshell\b|\bCOPY\b[^;\r\n]+\b(?:FROM|TO)\s+PROGRAM\b)', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
 
 function Mask-Token {
     param([string]$Token)
@@ -264,6 +266,10 @@ function Invoke-ScanFile {
     }
     if ((Test-PublicStaticPath $RelPosix) -and $PublicDumpExts.Contains($ext)) {
         Add-Finding $Findings $Seen "RED" "SEC-RED-020" "Backup or database dump file committed inside public web root" "OWASP A02:2025 / CWE-530" $RelPosix 1 "Backup/dump file in web/bundle output: $RelPosix"
+        return
+    }
+    if ($lowName.EndsWith(".tfstate") -or $lowName.EndsWith(".tfstate.backup")) {
+        Add-Finding $Findings $Seen "RED" "SEC-RED-022" "Terraform state file committed (risks plaintext DB/cloud credentials)" "OWASP A04:2025 / CWE-312" $RelPosix 1 "Terraform state file present: $RelPosix"
         return
     }
 
@@ -441,6 +447,12 @@ function Invoke-ScanFile {
         }
         if (-not $SafeEnvFiles.Contains($lowName) -and $ReDefaultCred.IsMatch($line)) {
             Add-Finding $Findings $Seen "RED" "SEC-RED-021" "Hardcoded default or weak admin/service credential" "OWASP A07:2025 / CWE-798" $RelPosix $idx $line
+        }
+        if (($ext -eq ".yml" -or $ext -eq ".yaml") -and $ReDockerPortDb.IsMatch($line)) {
+            Add-Finding $Findings $Seen "RED" "SEC-RED-023" "Container publishes DB/cache port on all interfaces (bypasses host firewall)" "OWASP A02:2025 / CWE-284" $RelPosix $idx $line
+        }
+        if ($SchemaCodeExts.Contains($ext) -and $ReDbOsExec.IsMatch($line)) {
+            Add-Finding $Findings $Seen "RED" "SEC-RED-024" "Dangerous database-to-host OS execution primitive (xp_cmdshell / COPY PROGRAM)" "OWASP A05:2025 / CWE-250" $RelPosix $idx $line
         }
         if ($ReWeakCrypto.IsMatch($line)) {
             Add-Finding $Findings $Seen "YELLOW" "SEC-YEL-003" "Deprecated or weak cryptographic primitive" "OWASP A04:2025 / CWE-327 / CWE-328" $RelPosix $idx $line

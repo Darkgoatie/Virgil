@@ -212,6 +212,13 @@ RE_DEFAULT_CRED = re.compile(
 RE_CI_LOG_TRACE = re.compile(
     r"(?:\bset\s+(?:-[a-zA-Z]*x|-o\s+xtrace)\b|(?:^|\s|;|&|\|)(?:printenv|env)\s*(?:$|[;#|&>]))"
 )
+RE_DOCKER_PORT_DB = re.compile(
+    r"^\s*-\s*['\"]?(?:0\.0\.0\.0:)?(?:3306|5432|1433|1521|6379|27017|9200|11211):\d+['\"]?(?:\s|$|#)"
+)
+RE_DB_OS_EXEC = re.compile(
+    r"(?:\bxp_cmdshell\b|\bCOPY\b[^;\r\n]+\b(?:FROM|TO)\s+PROGRAM\b)",
+    re.IGNORECASE,
+)
 
 
 @dataclass
@@ -353,6 +360,20 @@ def scan_file(
             rel_posix,
             1,
             f"Backup/dump file in web/bundle output: {rel_posix}",
+        )
+        return
+
+    if low_name.endswith(".tfstate") or low_name.endswith(".tfstate.backup"):
+        add_finding(
+            findings,
+            seen,
+            "RED",
+            "SEC-RED-022",
+            "Terraform state file committed (risks plaintext DB/cloud credentials)",
+            "OWASP A04:2025 / CWE-312",
+            rel_posix,
+            1,
+            f"Terraform state file present: {rel_posix}",
         )
         return
 
@@ -813,6 +834,32 @@ def scan_file(
                 "SEC-RED-021",
                 "Hardcoded default or weak admin/service credential",
                 "OWASP A07:2025 / CWE-798",
+                rel_posix,
+                idx,
+                line,
+            )
+
+        if ext in {".yml", ".yaml"} and RE_DOCKER_PORT_DB.search(line):
+            add_finding(
+                findings,
+                seen,
+                "RED",
+                "SEC-RED-023",
+                "Container publishes DB/cache port on all interfaces (bypasses host firewall)",
+                "OWASP A02:2025 / CWE-284",
+                rel_posix,
+                idx,
+                line,
+            )
+
+        if ext in SCHEMA_CODE_EXTS and RE_DB_OS_EXEC.search(line):
+            add_finding(
+                findings,
+                seen,
+                "RED",
+                "SEC-RED-024",
+                "Dangerous database-to-host OS execution primitive (xp_cmdshell / COPY PROGRAM)",
+                "OWASP A05:2025 / CWE-250",
                 rel_posix,
                 idx,
                 line,
