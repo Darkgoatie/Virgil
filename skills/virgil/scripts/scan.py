@@ -242,6 +242,11 @@ RE_CMS_FILE_EDIT = re.compile(
     r"define\s*\(\s*['\"]DISALLOW_FILE_(?:EDIT|MODS)['\"]\s*,\s*false\s*\)",
     re.IGNORECASE,
 )
+RE_DOTNET_JAVA_DESER = re.compile(
+    r"\b(?:BinaryFormatter|LosFormatter|ObjectStateFormatter|NetDataContractSerializer|SoapFormatter|XMLDecoder)\b|\bObjectInputStream\b[^;\r\n]*\.read(?:Object|Unshared)\s*\("
+)
+RE_UNSAFE_C_STR = re.compile(r"\b(?:gets|strcpy|strcat|sprintf|vsprintf)\s*\(")
+C_CPP_EXTS = {".c", ".cc", ".cpp", ".cxx", ".h", ".hpp"}
 
 
 @dataclass
@@ -996,6 +1001,32 @@ def scan_file(
                 "SEC-YEL-018",
                 "CMS in-dashboard file/plugin editor explicitly enabled",
                 "OWASP A02:2025 / CWE-284",
+                rel_posix,
+                idx,
+                line,
+            )
+
+        if ext in {".cs", ".java", ".kt"} and RE_DOTNET_JAVA_DESER.search(line):
+            add_finding(
+                findings,
+                seen,
+                "RED",
+                "SEC-RED-029",
+                "Unsafe .NET or Java binary deserialization API",
+                "Microsoft .NET / Oracle Java SE / CWE-502",
+                rel_posix,
+                idx,
+                line,
+            )
+
+        if ext in C_CPP_EXTS and RE_UNSAFE_C_STR.search(line):
+            add_finding(
+                findings,
+                seen,
+                "RED",
+                "SEC-RED-030",
+                "Unbounded C string/buffer function susceptible to buffer overflow",
+                "NASA JPL / OpenSSF / Apple / CWE-120",
                 rel_posix,
                 idx,
                 line,

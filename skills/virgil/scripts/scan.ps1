@@ -163,6 +163,10 @@ $ReWebViewFileAccess = [regex]::new('(?:\bsetAllowFileAccess\s*\(\s*true\s*\)|\b
 $ReBrokerAnonOrCookie = [regex]::new('(?:\bALLOW_ANONYMOUS_LOGIN\s*[:=]\s*[''"]?yes[''"]?|\ballow_anonymous\s+true\b|\bKAFKA_CFG_ALLOW_PLAINTEXT_LISTENER\s*[:=]\s*[''"]?yes[''"]?|\bRABBITMQ_ERLANG_COOKIE\s*[:=]\s*[''"]?[A-Za-z0-9_-]{4,})', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
 $RePendingIntentMutable = [regex]::new('\bPendingIntent\.FLAG_MUTABLE\b')
 $ReCmsFileEdit = [regex]::new('define\s*\(\s*[''"]DISALLOW_FILE_(?:EDIT|MODS)[''"]\s*,\s*false\s*\)', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+$ReDotnetJavaDeser = [regex]::new('\b(?:BinaryFormatter|LosFormatter|ObjectStateFormatter|NetDataContractSerializer|SoapFormatter|XMLDecoder)\b|\bObjectInputStream\b[^;\r\n]*\.read(?:Object|Unshared)\s*\(')
+$ReUnsafeCStr = [regex]::new('\b(?:gets|strcpy|strcat|sprintf|vsprintf)\s*\(')
+$CCppExts = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+@('.c', '.cc', '.cpp', '.cxx', '.h', '.hpp') | ForEach-Object { [void]$CCppExts.Add($_) }
 
 function Mask-Token {
     param([string]$Token)
@@ -485,6 +489,12 @@ function Invoke-ScanFile {
         }
         if ($ext -eq ".php" -and $ReCmsFileEdit.IsMatch($line)) {
             Add-Finding $Findings $Seen "YELLOW" "SEC-YEL-018" "CMS in-dashboard file/plugin editor explicitly enabled" "OWASP A02:2025 / CWE-284" $RelPosix $idx $line
+        }
+        if (($ext -in @(".cs", ".java", ".kt")) -and $ReDotnetJavaDeser.IsMatch($line)) {
+            Add-Finding $Findings $Seen "RED" "SEC-RED-029" "Unsafe .NET or Java binary deserialization API" "Microsoft .NET / Oracle Java SE / CWE-502" $RelPosix $idx $line
+        }
+        if ($CCppExts.Contains($ext) -and $ReUnsafeCStr.IsMatch($line)) {
+            Add-Finding $Findings $Seen "RED" "SEC-RED-030" "Unbounded C string/buffer function susceptible to buffer overflow" "NASA JPL / OpenSSF / Apple / CWE-120" $RelPosix $idx $line
         }
         if ($ReWeakCrypto.IsMatch($line)) {
             Add-Finding $Findings $Seen "YELLOW" "SEC-YEL-003" "Deprecated or weak cryptographic primitive" "OWASP A04:2025 / CWE-327 / CWE-328" $RelPosix $idx $line

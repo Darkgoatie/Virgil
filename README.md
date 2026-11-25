@@ -6,12 +6,12 @@
 
 **Portable security auditing and hardening skill for AI coding agents.**
 
-[![Version](https://img.shields.io/badge/version-1.10.0-2AB985?style=flat-square)](skills/virgil/VERSION)
+[![Version](https://img.shields.io/badge/version-1.11.0-2AB985?style=flat-square)](skills/virgil/VERSION)
 [![Spec](https://img.shields.io/badge/spec-Agent_Skills_(SKILL.md)-1F2937?style=flat-square)](https://agentskills.io/specification)
 [![Scanners](https://img.shields.io/badge/scanners-Python_%7C_PowerShell-1F2937?style=flat-square)](#running-a-security-audit)
 [![License](https://img.shields.io/badge/license-MIT-1F2937?style=flat-square)](LICENSE)
 
-[Quick Install](#quick-install) · [Running an Audit](#running-a-security-audit) · [Severity Model](#severity-model) · [Skill Layout](#skill-layout) · [Agent Skills Ecosystem](#agent-skills-ecosystem)
+[Quick Install](#quick-install) · [Running an Audit](#running-a-security-audit) · [Severity Model](#severity-model) · [Skill Layout](#skill-layout) · [Authoritative Sources](#authoritative-standards--aaa-codebase-safety-sources) · [Agent Skills Ecosystem](#agent-skills-ecosystem)
 
 </div>
 
@@ -157,7 +157,7 @@ Virgil/
 └── skills/
     └── virgil/
         ├── SKILL.md                           # Severity rubric, Step 0-5 audit workflow, report contract
-        ├── VERSION                            # Semantic version (1.10.0)
+        ├── VERSION                            # Semantic version (1.11.0)
         ├── assets/
         │   └── icon.svg                       # Vector skill emblem
         ├── references/
@@ -210,6 +210,24 @@ Virgil/
 ## Unverified / Out-of-Repo Gaps
 - Live Supabase RLS policies and S3 Block Public Access account settings reside outside this repository.
 ```
+
+---
+
+## Authoritative Standards & AAA Codebase Safety Sources
+
+Virgil's audit rubrics, pre-scanner rules, and domain reference guides synthesize primary-source engineering and security standards from leading engineering organizations and standards bodies:
+
+| Organization | Primary Guides & Standards Credited | Core Controls Incorporated |
+|---|---|---|
+| **Google** | [Chromium Rule of 2](https://chromium.googlesource.com/chromium/src/+/main/docs/security/rule-of-2.md) · [Chromium Memory Safety](https://www.chromium.org/Home/chromium-security/memory-safety/) · [Google Style Guides (C++, Rust, Go, Java)](https://github.com/google/styleguide) · [Engineering Practices Code Review](https://github.com/google/eng-practices) | Rule-of-2 native/parser containment, small/encapsulated/documented Rust `unsafe` blocks, BeyondCorp/BeyondProd mTLS & Binary Authorization. |
+| **Microsoft** | [Microsoft SDL Practices](https://www.microsoft.com/en-us/securityengineering/sdl/practices) · [.NET Secure Coding Guidelines](https://raw.githubusercontent.com/dotnet/docs/main/docs/standard/security/secure-coding-guidelines.md) · [C++ Core Guidelines](https://github.com/isocpp/CppCoreGuidelines) · [Microsoft GSL](https://github.com/microsoft/GSL) · [Engineering Playbook (Security & C#)](https://github.com/microsoft/code-with-engineering-playbook) | Banning `BinaryFormatter`/.NET Remoting/DCOM/CAS, `gsl::span`/`not_null` bounds & lifetime safety, STRIDE threat modeling, SFI identity & secret rules. |
+| **Amazon / AWS** | [AWS Well-Architected Security Pillar](https://d1.awsstatic.com/whitepapers/architecture/AWS-Security-Pillar.pdf) · [AWS `s2n-tls` Development Guide](https://raw.githubusercontent.com/aws/s2n-tls/main/docs/DEVELOPMENT-GUIDE.md) & [Safety Macros](https://raw.githubusercontent.com/aws/s2n-tls/main/docs/SAFETY-MACROS.md) · [Kani Rust Verifier](https://github.com/model-checking/kani) | `RESULT_ENSURE*` / `RESULT_CHECKED_MEMCPY` bounds macros, non-swappable zeroed secret buffers, Kani bit-precise Rust verification, IMDSv2, IAM Access Analyzer, SCPs. |
+| **Oracle** | [Secure Coding Guidelines for Java SE](https://www.oracle.com/java/technologies/javase/seccodeguide.html) | Untrusted Java deserialization (`ObjectInputStream`/`XMLDecoder`), JNI buffer bounds, defensive copying of mutable state, finalizer-attack prevention, DoS resource caps. |
+| **Palantir** | [Palantir `safe-logging`](https://github.com/palantir/safe-logging) · [Palantir `gradle-baseline`](https://github.com/palantir/gradle-baseline) · [Palantir `policy-bot`](https://github.com/palantir/policy-bot) | Compile-time `SafeArg` vs `UnsafeArg` PII log separation, exact dependency & classpath uniqueness locks, reproducible archives, sensitive-path PR approval policies. |
+| **Cloudflare** | [Cloudflare `pingora`](https://github.com/cloudflare/pingora) · [Cloudflare `quiche`](https://github.com/cloudflare/quiche) · [Cloudflare `foundations`](https://github.com/cloudflare/foundations) | Memory-safe Rust network/protocol parsers, `seccomp` Linux syscall sandboxing, `Full (Strict)` TLS & Authenticated Origin Pulls (mTLS). |
+| **Meta** | [Facebook `Infer` Static Analyzer](https://github.com/facebook/infer) · [Pyre / `Pysa` Taint Analyzer](https://github.com/facebook/pyre-check) · [Facebook `Folly`](https://github.com/facebook/folly) | Compositional static analysis for null/memory/concurrency bugs, source-to-sink Python taint tracking, and AI Agent "Rule of Two" guardrails. |
+| **Apple, Uber, TigerBeetle & NASA JPL** | [Apple Secure Coding Guide](https://developer.apple.com/library/archive/documentation/Security/Conceptual/SecureCodingGuide/Introduction.html) · [Uber Go Style Guide](https://github.com/uber-go/guide/blob/master/style.md) · [TigerBeetle `TigerStyle`](https://github.com/tigerbeetle/tigerbeetle/blob/main/docs/TIGER_STYLE.md) · [NASA JPL Power of 10](https://web.eecs.umich.edu/~imarkov/10rules.pdf) | Apple ATS/Keychain/Secure Enclave, Go goroutine/slice safety, bounded non-recursive loops/queues, explicit-width integers, paired assertions, zeroed buffer padding. |
+| **OWASP, OpenSSF, NIST, CISA & IETF** | [OWASP Top 10:2025](https://top10.owasp.org/2025/) · [ASVS 5.0](https://asvs.owasp.org/) · [API Top 10](https://owasp.org/API-Security/) · [MASVS](https://mas.owasp.org/MASVS/) · [CI/CD Top 10](https://owasp.org/www-project-top-10-ci-cd-security-risks/) · [Secure Coding Checklist](https://raw.githubusercontent.com/OWASP/www-project-secure-coding-practices-quick-reference-guide/master/stable-en/02-checklist/05-checklist.md) · [OpenSSF Compiler Hardening Guide](https://raw.githubusercontent.com/ossf/wg-best-practices-os-developers/main/docs/Compiler-Hardening-Guides/Compiler-Options-Hardening-Guide-for-C-and-C%2B%2B.md) · [CISA Memory Safety Roadmaps](https://www.cisa.gov/sites/default/files/2023-12/The-Case-for-Memory-Safe-Roadmaps-508c.pdf) · [NIST SP 800-63-4](https://csrc.nist.gov/pubs/sp/800/63/4/) & [SP 800-218 SSDF](https://csrc.nist.gov/publications/detail/sp/800-218/final) · [IETF RFC 9700](https://www.rfc-editor.org/info/rfc9700) / [RFC 8725](https://www.rfc-editor.org/info/rfc8725) | Full web/API/mobile/CI-CD/LLM baselines, GCC/Clang/MSVC binary hardening flags (`-fPIE`, `-D_FORTIFY_SOURCE=3`, `-fstack-protector-strong`, RELRO, CFI), OAuth 2.1/JWT BCPs, and PQC roadmaps. |
 
 ---
 
