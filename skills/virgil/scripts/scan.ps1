@@ -167,6 +167,8 @@ $ReDotnetJavaDeser = [regex]::new('\b(?:BinaryFormatter|LosFormatter|ObjectState
 $ReUnsafeCStr = [regex]::new('\b(?:gets|strcpy|strcat|sprintf|vsprintf)\s*\(')
 $CCppExts = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
 @('.c', '.cc', '.cpp', '.cxx', '.h', '.hpp') | ForEach-Object { [void]$CCppExts.Add($_) }
+$ReShareExportInsecure = [regex]::new('(?:\bno_root_squash\b|\bserver\s+signing\s*=\s*(?:disabled|no|off)\b|\b(?:min\s+protocol|server\s+min\s+protocol|client\s+min\s+protocol)\s*=\s*(?:NT1|LANMAN[12]|CORE)\b|\bguest\s+ok\s*=\s*yes\b|\banonymous_enable\s*=\s*YES\b|\bcpassword\s*=\s*[''"][A-Za-z0-9+/=]{8,}[''"])', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+$ReMysqlLocalInfile = [regex]::new('(?:\blocal[-_]infile\s*=\s*(?:1|ON|true)\b|\ballowLoadLocalInfile\s*[:=]\s*true\b|\blocalInfile\s*:\s*true\b)', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
 
 function Mask-Token {
     param([string]$Token)
@@ -495,6 +497,9 @@ function Invoke-ScanFile {
         }
         if ($CCppExts.Contains($ext) -and $ReUnsafeCStr.IsMatch($line)) {
             Add-Finding $Findings $Seen "RED" "SEC-RED-030" "Unbounded C string/buffer function susceptible to buffer overflow" "NASA JPL / OpenSSF / Apple / CWE-120" $RelPosix $idx $line
+        }
+        if ($ReShareExportInsecure.IsMatch($line) -or $ReMysqlLocalInfile.IsMatch($line)) {
+            Add-Finding $Findings $Seen "RED" "SEC-RED-031" "Insecure file-share/NFS/FTP config, GPO cpassword, or MySQL local_infile enabled" "CIS Benchmarks / OWASP A02:2025 / CWE-306 / CWE-73" $RelPosix $idx $line
         }
         if ($ReWeakCrypto.IsMatch($line)) {
             Add-Finding $Findings $Seen "YELLOW" "SEC-YEL-003" "Deprecated or weak cryptographic primitive" "OWASP A04:2025 / CWE-327 / CWE-328" $RelPosix $idx $line

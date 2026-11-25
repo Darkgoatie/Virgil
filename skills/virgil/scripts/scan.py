@@ -247,6 +247,14 @@ RE_DOTNET_JAVA_DESER = re.compile(
 )
 RE_UNSAFE_C_STR = re.compile(r"\b(?:gets|strcpy|strcat|sprintf|vsprintf)\s*\(")
 C_CPP_EXTS = {".c", ".cc", ".cpp", ".cxx", ".h", ".hpp"}
+RE_SHARE_EXPORT_INSECURE = re.compile(
+    r"(?:\bno_root_squash\b|\bserver\s+signing\s*=\s*(?:disabled|no|off)\b|\b(?:min\s+protocol|server\s+min\s+protocol|client\s+min\s+protocol)\s*=\s*(?:NT1|LANMAN[12]|CORE)\b|\bguest\s+ok\s*=\s*yes\b|\banonymous_enable\s*=\s*YES\b|\bcpassword\s*=\s*['\"][A-Za-z0-9+/=]{8,}['\"])",
+    re.IGNORECASE,
+)
+RE_MYSQL_LOCAL_INFILE = re.compile(
+    r"(?:\blocal[-_]infile\s*=\s*(?:1|ON|true)\b|\ballowLoadLocalInfile\s*[:=]\s*true\b|\blocalInfile\s*:\s*true\b)",
+    re.IGNORECASE,
+)
 
 
 @dataclass
@@ -1027,6 +1035,19 @@ def scan_file(
                 "SEC-RED-030",
                 "Unbounded C string/buffer function susceptible to buffer overflow",
                 "NASA JPL / OpenSSF / Apple / CWE-120",
+                rel_posix,
+                idx,
+                line,
+            )
+
+        if RE_SHARE_EXPORT_INSECURE.search(line) or RE_MYSQL_LOCAL_INFILE.search(line):
+            add_finding(
+                findings,
+                seen,
+                "RED",
+                "SEC-RED-031",
+                "Insecure file-share/NFS/FTP config, GPO cpassword, or MySQL local_infile enabled",
+                "CIS Benchmarks / OWASP A02:2025 / CWE-306 / CWE-73",
                 rel_posix,
                 idx,
                 line,
