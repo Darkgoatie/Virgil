@@ -6,9 +6,9 @@
 
 **Portable security auditing and hardening skill for AI coding agents.**
 
-[![Version](https://img.shields.io/badge/version-1.11.0-2AB985?style=flat-square)](skills/virgil/VERSION)
+[![Version](https://img.shields.io/badge/version-1.12.0-2AB985?style=flat-square)](skills/virgil/VERSION)
 [![Spec](https://img.shields.io/badge/spec-Agent_Skills_(SKILL.md)-1F2937?style=flat-square)](https://agentskills.io/specification)
-[![Controls](https://img.shields.io/badge/controls-161_semantic_%7C_49_static_rules-1F2937?style=flat-square)](#severity-model)
+[![Controls](https://img.shields.io/badge/controls-162_semantic_%7C_49_static_rules-1F2937?style=flat-square)](#severity-model)
 [![Scanners](https://img.shields.io/badge/scanners-Python_%7C_PowerShell-1F2937?style=flat-square)](#running-a-security-audit)
 [![License](https://img.shields.io/badge/license-MIT-1F2937?style=flat-square)](LICENSE)
 
@@ -18,7 +18,7 @@
 
 ---
 
-Virgil teaches coding agents how to run structured repository security audits built on the open [Agent Skills (`SKILL.md`) specification](https://agentskills.io/specification). It pairs zero-dependency Python and PowerShell static pre-scanners (**49 deterministic rules**: `30` `[RED]`, `18` `[YELLOW]`, `1` `[OPTIONAL]`) with **161 classified semantic controls** across 8 progressive-disclosure reference guides covering web/SSR/CMS, API/OAuth-issuer/OIDC/SAML/account-lifecycle auth, secrets/cryptography/safe-logging, databases/BaaS/message brokers, containers/CI-CD/supply-chain/native-memory safety, AI-agent/MCP boundaries, mobile apps, and payment/ERP state machines.
+Virgil teaches coding agents how to run structured repository security audits built on the open [Agent Skills (`SKILL.md`) specification](https://agentskills.io/specification). It pairs zero-dependency Python and PowerShell static pre-scanners (**49 deterministic rules**: `30` `[RED]`, `18` `[YELLOW]`, `1` `[OPTIONAL]`) with **162 classified semantic controls** across 8 progressive-disclosure reference guides covering web/SSR/CMS, API/OAuth-issuer/OIDC/SAML/account-lifecycle auth, secrets/cryptography/safe-logging, databases/BaaS/message brokers, containers/CI-CD/supply-chain/native-memory safety, AI-agent/MCP boundaries, mobile/desktop local IPC, and payment/ERP state machines.
 
 ## Quick Install
 
@@ -158,7 +158,7 @@ Virgil/
 └── skills/
     └── virgil/
         ├── SKILL.md                           # Severity rubric, Step 0-5 audit workflow, report contract
-        ├── VERSION                            # Semantic version (1.11.0)
+        ├── VERSION                            # Semantic version (1.12.0)
         ├── assets/
         │   └── icon.svg                       # Vector skill emblem
         ├── references/
@@ -225,7 +225,7 @@ Virgil's audit rubrics, pre-scanner rules, and domain reference guides synthesiz
 | **Amazon / AWS** | [AWS Well-Architected Security Pillar](https://d1.awsstatic.com/whitepapers/architecture/AWS-Security-Pillar.pdf) · [AWS `s2n-tls` Development Guide](https://raw.githubusercontent.com/aws/s2n-tls/main/docs/DEVELOPMENT-GUIDE.md) & [Safety Macros](https://raw.githubusercontent.com/aws/s2n-tls/main/docs/SAFETY-MACROS.md) · [Kani Rust Verifier](https://github.com/model-checking/kani) | `RESULT_ENSURE*` / `RESULT_CHECKED_MEMCPY` bounds macros, non-swappable zeroed secret buffers, Kani bit-precise Rust verification, IMDSv2, IAM Access Analyzer, SCPs. |
 | **Oracle** | [Secure Coding Guidelines for Java SE](https://www.oracle.com/java/technologies/javase/seccodeguide.html) | Untrusted Java deserialization (`ObjectInputStream`/`XMLDecoder`), JNI buffer bounds, defensive copying of mutable state, finalizer-attack prevention, DoS resource caps. |
 | **Palantir** | [Palantir `safe-logging`](https://github.com/palantir/safe-logging) · [Palantir `gradle-baseline`](https://github.com/palantir/gradle-baseline) · [Palantir `policy-bot`](https://github.com/palantir/policy-bot) | Compile-time `SafeArg` vs `UnsafeArg` PII log separation, exact dependency & classpath uniqueness locks, reproducible archives, sensitive-path PR approval policies. |
-| **Cloudflare** | [Cloudflare `pingora`](https://github.com/cloudflare/pingora) · [Cloudflare `quiche`](https://github.com/cloudflare/quiche) · [Cloudflare `foundations`](https://github.com/cloudflare/foundations) | Memory-safe Rust network/protocol parsers, `seccomp` Linux syscall sandboxing, `Full (Strict)` TLS & Authenticated Origin Pulls (mTLS). |
+| **Cloudflare** | [`cloudflare/security-audit-skill`](https://github.com/cloudflare/security-audit-skill) · [Cloudflare `pingora`](https://github.com/cloudflare/pingora) · [Cloudflare `quiche`](https://github.com/cloudflare/quiche) · [Cloudflare `foundations`](https://github.com/cloudflare/foundations) | Adversarial candidate refutation, source-visibility (`Unverified`) gate, local IPC/privileged-helper & FFI/binary-loader/double-fetch checks, AI action-binding, memory-safe Rust parsers, `seccomp` sandboxing, and Authenticated Origin Pulls (mTLS). |
 | **Meta** | [Facebook `Infer` Static Analyzer](https://github.com/facebook/infer) · [Pyre / `Pysa` Taint Analyzer](https://github.com/facebook/pyre-check) · [Facebook `Folly`](https://github.com/facebook/folly) | Compositional static analysis for null/memory/concurrency bugs, source-to-sink Python taint tracking, and AI Agent "Rule of Two" guardrails. |
 | **Apple, Uber, TigerBeetle & NASA JPL** | [Apple Secure Coding Guide](https://developer.apple.com/library/archive/documentation/Security/Conceptual/SecureCodingGuide/Introduction.html) · [Uber Go Style Guide](https://github.com/uber-go/guide/blob/master/style.md) · [TigerBeetle `TigerStyle`](https://github.com/tigerbeetle/tigerbeetle/blob/main/docs/TIGER_STYLE.md) · [NASA JPL Power of 10](https://web.eecs.umich.edu/~imarkov/10rules.pdf) | Apple ATS/Keychain/Secure Enclave, Go goroutine/slice safety, bounded non-recursive loops/queues, explicit-width integers, paired assertions, zeroed buffer padding. |
 | **OWASP, OpenSSF, NIST, CISA & IETF** | [OWASP Top 10:2025](https://top10.owasp.org/2025/) · [ASVS 5.0](https://asvs.owasp.org/) · [API Top 10](https://owasp.org/API-Security/) · [MASVS](https://mas.owasp.org/MASVS/) · [CI/CD Top 10](https://owasp.org/www-project-top-10-ci-cd-security-risks/) · [Secure Coding Checklist](https://raw.githubusercontent.com/OWASP/www-project-secure-coding-practices-quick-reference-guide/master/stable-en/02-checklist/05-checklist.md) · [OpenSSF Compiler Hardening Guide](https://raw.githubusercontent.com/ossf/wg-best-practices-os-developers/main/docs/Compiler-Hardening-Guides/Compiler-Options-Hardening-Guide-for-C-and-C%2B%2B.md) · [CISA Memory Safety Roadmaps](https://www.cisa.gov/sites/default/files/2023-12/The-Case-for-Memory-Safe-Roadmaps-508c.pdf) · [NIST SP 800-63-4](https://csrc.nist.gov/pubs/sp/800/63/4/) & [SP 800-218 SSDF](https://csrc.nist.gov/publications/detail/sp/800-218/final) · [IETF RFC 9700](https://www.rfc-editor.org/info/rfc9700) / [RFC 8725](https://www.rfc-editor.org/info/rfc8725) | Full web/API/mobile/CI-CD/LLM baselines, GCC/Clang/MSVC binary hardening flags (`-fPIE`, `-D_FORTIFY_SOURCE=3`, `-fstack-protector-strong`, RELRO, CFI), OAuth 2.1/JWT BCPs, and PQC roadmaps. |
@@ -244,6 +244,7 @@ Virgil adheres to the portable `SKILL.md` format used across major open-source s
 | [`vercel-labs/agent-skills`](https://github.com/vercel-labs/agent-skills) | Vercel Labs | Production React, Next.js, web design, and deployment best-practice skills. |
 | [`openai/skills`](https://github.com/openai/skills) | OpenAI | Official skill catalog for Codex CLI and coding workflows. |
 | [`trailofbits/skills`](https://github.com/trailofbits/skills) | Trail of Bits | Deep security engineering, threat modeling, and specialized vulnerability/auditing skills. |
+| [`cloudflare/security-audit-skill`](https://github.com/cloudflare/security-audit-skill) | Cloudflare | Multi-phase security audit skill with adversarial candidate verification, coverage ledgers, and domain hunting companions. |
 | [`ComposioHQ/awesome-claude-skills`](https://github.com/ComposioHQ/awesome-claude-skills) | Composio | Community-curated directory of Claude and cross-agent skills. |
 | [`VoltAgent/awesome-agent-skills`](https://github.com/VoltAgent/awesome-agent-skills) | VoltAgent | Broad open collection of agent skills compatible across coding assistants. |
 | [`sickn33/agentic-awesome-skills`](https://github.com/sickn33/agentic-awesome-skills) | Community | Curated multi-agent skill directory spanning Antigravity, Cursor, Codex, and Claude Code. |
