@@ -159,6 +159,10 @@ $ReDbOsExec = [regex]::new('(?:\bxp_cmdshell\b|\bCOPY\b[^;\r\n]+\b(?:FROM|TO)\s+
 $ReWeakJwtSecret = [regex]::new('\bjwt_?secret\b\s*[:=]\s*[''"]?(?:secret|changeme|dev[-_]?secret|test[-_]?secret|123456|default|mysecret)[''"]?(?:\s|$|,|;|#)', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
 $ReDirListing = [regex]::new('(?:\bautoindex\s+on\b|\bOptions\s+[^\r\n]*\+Indexes\b|\bserveIndex\s*\()', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
 $ReParentCookieDomain = [regex]::new('(?:Domain=\.[A-Za-z0-9.-]+|\bdomain\s*:\s*[''"]\.[A-Za-z0-9.-]+[''"])')
+$ReWebViewFileAccess = [regex]::new('(?:\bsetAllowFileAccess\s*\(\s*true\s*\)|\bsetAllowUniversalAccessFromFileURLs\s*\(\s*true\s*\)|\bsetAllowFileAccessFromFileURLs\s*\(\s*true\s*\)|\baddJavascriptInterface\s*\()')
+$ReBrokerAnonOrCookie = [regex]::new('(?:\bALLOW_ANONYMOUS_LOGIN\s*[:=]\s*[''"]?yes[''"]?|\ballow_anonymous\s+true\b|\bKAFKA_CFG_ALLOW_PLAINTEXT_LISTENER\s*[:=]\s*[''"]?yes[''"]?|\bRABBITMQ_ERLANG_COOKIE\s*[:=]\s*[''"]?[A-Za-z0-9_-]{4,})', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+$RePendingIntentMutable = [regex]::new('\bPendingIntent\.FLAG_MUTABLE\b')
+$ReCmsFileEdit = [regex]::new('define\s*\(\s*[''"]DISALLOW_FILE_(?:EDIT|MODS)[''"]\s*,\s*false\s*\)', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
 
 function Mask-Token {
     param([string]$Token)
@@ -469,6 +473,18 @@ function Invoke-ScanFile {
         }
         if ($CodeRegexExts.Contains($ext) -and $ReParentCookieDomain.IsMatch($line)) {
             Add-Finding $Findings $Seen "YELLOW" "SEC-YEL-016" "Cookie scoped to parent domain (exposes cookie to sibling subdomains)" "OWASP Session Mgmt / CWE-1275" $RelPosix $idx $line
+        }
+        if (($ext -eq ".java" -or $ext -eq ".kt") -and $ReWebViewFileAccess.IsMatch($line)) {
+            Add-Finding $Findings $Seen "RED" "SEC-RED-027" "Insecure Android WebView file access or exposed JS bridge" "OWASP MASVS-PLATFORM / CWE-749" $RelPosix $idx $line
+        }
+        if ((-not $SafeEnvFiles.Contains($lowName)) -and (($ext -in @(".yml", ".yaml", ".conf", ".env", ".properties")) -or $lowName.StartsWith(".env") -or $dockerfile) -and $ReBrokerAnonOrCookie.IsMatch($line)) {
+            Add-Finding $Findings $Seen "RED" "SEC-RED-028" "Unauthenticated/plaintext message broker config or hardcoded cluster cookie" "OWASP A02:2025 / CWE-306" $RelPosix $idx $line
+        }
+        if (($ext -eq ".java" -or $ext -eq ".kt") -and $RePendingIntentMutable.IsMatch($line)) {
+            Add-Finding $Findings $Seen "YELLOW" "SEC-YEL-017" "Mutable Android PendingIntent allows parameter tampering by third-party apps" "OWASP MASVS-PLATFORM / CWE-927" $RelPosix $idx $line
+        }
+        if ($ext -eq ".php" -and $ReCmsFileEdit.IsMatch($line)) {
+            Add-Finding $Findings $Seen "YELLOW" "SEC-YEL-018" "CMS in-dashboard file/plugin editor explicitly enabled" "OWASP A02:2025 / CWE-284" $RelPosix $idx $line
         }
         if ($ReWeakCrypto.IsMatch($line)) {
             Add-Finding $Findings $Seen "YELLOW" "SEC-YEL-003" "Deprecated or weak cryptographic primitive" "OWASP A04:2025 / CWE-327 / CWE-328" $RelPosix $idx $line

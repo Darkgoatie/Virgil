@@ -15,6 +15,10 @@
 - `[RED]` **Workflow / State-Machine Bypass:** Enforce allowed state transitions server-side (e.g., `draft -> paid -> fulfilled`, never `draft -> fulfilled` directly via direct endpoint call or webhook replay). Verify payment status directly with the processor or signed webhook event before granting entitlements.
 - `[YELLOW]` **Numeric & Currency Precision Bugs:** Store and calculate monetary values in **integer minor units** (cents/kurus) or fixed-precision `DECIMAL`/`Numeric` types—never IEEE-754 floating-point (`float`/`double`). Reject `NaN`, `Infinity`, zero, and negative quantities/amounts at schema validation boundaries.
 
+## 3. Enterprise Finance, Payroll, HR & ERP Controls
+- `[RED]` **Segregation-of-Duties (SoD) & Payment-Run Integrity:** Enforce dual control so no single account can create/edit employee or vendor bank master records, approve invoices, and release payment runs; block self-approval and split-invoice threshold bypasses; verify employee/vendor bank-detail changes out-of-band; reconcile payment files against approved runs; isolate host-to-host banking signing keys (`EBICS`/`ISO 20022`); and cryptographically sign/verify SFTP flat-file integration drops.
+- `[YELLOW]` **ERP Transport, Custom Code & Shadow Front Ends:** Encrypt SAP RFC (`SNC`), keep SAProuter/message servers/native ERP listeners off public networks, govern Change & Transport System (`CTS`) and RPA/service accounts, audit custom ABAP/SuiteScript extensions for missing authorization checks, and restrict read-only BI/shadow front ends.
+
 ## Verification Checklist
 - Grep logs, DTOs, and schemas to confirm zero raw card PAN/CVV fields touch backend handlers or logs.
 - Replay checkout/order requests with mutated `amount: 1`, `quantity: -5`, or skipped payment step; assert server rejection.

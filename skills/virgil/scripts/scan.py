@@ -230,6 +230,18 @@ RE_DIR_LISTING = re.compile(
 RE_PARENT_COOKIE_DOMAIN = re.compile(
     r"(?:Domain=\.[A-Za-z0-9.-]+|\bdomain\s*:\s*['\"]\.[A-Za-z0-9.-]+['\"])"
 )
+RE_WEBVIEW_FILE_ACCESS = re.compile(
+    r"(?:\bsetAllowFileAccess\s*\(\s*true\s*\)|\bsetAllowUniversalAccessFromFileURLs\s*\(\s*true\s*\)|\bsetAllowFileAccessFromFileURLs\s*\(\s*true\s*\)|\baddJavascriptInterface\s*\()"
+)
+RE_BROKER_ANON_OR_COOKIE = re.compile(
+    r"(?:\bALLOW_ANONYMOUS_LOGIN\s*[:=]\s*['\"]?yes['\"]?|\ballow_anonymous\s+true\b|\bKAFKA_CFG_ALLOW_PLAINTEXT_LISTENER\s*[:=]\s*['\"]?yes['\"]?|\bRABBITMQ_ERLANG_COOKIE\s*[:=]\s*['\"]?[A-Za-z0-9_-]{4,})",
+    re.IGNORECASE,
+)
+RE_PENDING_INTENT_MUTABLE = re.compile(r"\bPendingIntent\.FLAG_MUTABLE\b")
+RE_CMS_FILE_EDIT = re.compile(
+    r"define\s*\(\s*['\"]DISALLOW_FILE_(?:EDIT|MODS)['\"]\s*,\s*false\s*\)",
+    re.IGNORECASE,
+)
 
 
 @dataclass
@@ -928,6 +940,62 @@ def scan_file(
                 "SEC-YEL-016",
                 "Cookie scoped to parent domain (exposes cookie to sibling subdomains)",
                 "OWASP Session Mgmt / CWE-1275",
+                rel_posix,
+                idx,
+                line,
+            )
+
+        if ext in {".java", ".kt"} and RE_WEBVIEW_FILE_ACCESS.search(line):
+            add_finding(
+                findings,
+                seen,
+                "RED",
+                "SEC-RED-027",
+                "Insecure Android WebView file access or exposed JS bridge",
+                "OWASP MASVS-PLATFORM / CWE-749",
+                rel_posix,
+                idx,
+                line,
+            )
+
+        if (
+            low_name not in SAFE_ENV_FILES
+            and (ext in {".yml", ".yaml", ".conf", ".env", ".properties"} or low_name.startswith(".env") or dockerfile)
+            and RE_BROKER_ANON_OR_COOKIE.search(line)
+        ):
+            add_finding(
+                findings,
+                seen,
+                "RED",
+                "SEC-RED-028",
+                "Unauthenticated/plaintext message broker config or hardcoded cluster cookie",
+                "OWASP A02:2025 / CWE-306",
+                rel_posix,
+                idx,
+                line,
+            )
+
+        if ext in {".java", ".kt"} and RE_PENDING_INTENT_MUTABLE.search(line):
+            add_finding(
+                findings,
+                seen,
+                "YELLOW",
+                "SEC-YEL-017",
+                "Mutable Android PendingIntent allows parameter tampering by third-party apps",
+                "OWASP MASVS-PLATFORM / CWE-927",
+                rel_posix,
+                idx,
+                line,
+            )
+
+        if ext == ".php" and RE_CMS_FILE_EDIT.search(line):
+            add_finding(
+                findings,
+                seen,
+                "YELLOW",
+                "SEC-YEL-018",
+                "CMS in-dashboard file/plugin editor explicitly enabled",
+                "OWASP A02:2025 / CWE-284",
                 rel_posix,
                 idx,
                 line,
