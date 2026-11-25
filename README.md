@@ -8,7 +8,7 @@
 
 [![Version](https://img.shields.io/badge/version-1.15.0-2AB985?style=flat-square)](skills/virgil/VERSION)
 [![Spec](https://img.shields.io/badge/spec-Agent_Skills_(SKILL.md)-1F2937?style=flat-square)](https://agentskills.io/specification)
-[![Controls](https://img.shields.io/badge/controls-164_semantic_%7C_51_static_rules-1F2937?style=flat-square)](#severity-model)
+[![Controls](https://img.shields.io/badge/controls-165_semantic_%7C_51_static_rules-1F2937?style=flat-square)](#severity-model)
 [![Scanners](https://img.shields.io/badge/scanners-Python_%7C_PowerShell-1F2937?style=flat-square)](#running-a-security-audit)
 [![License](https://img.shields.io/badge/license-MIT-1F2937?style=flat-square)](LICENSE)
 
@@ -18,7 +18,7 @@
 
 ---
 
-Virgil teaches coding agents how to run structured repository security audits built on the open [Agent Skills (`SKILL.md`) specification](https://agentskills.io/specification). It pairs zero-dependency Python and PowerShell static pre-scanners (**51 deterministic rules**: `32` `[RED]`, `18` `[YELLOW]`, `1` `[OPTIONAL]`) with **164 classified semantic controls** across 8 progressive-disclosure reference guides covering web/SSR/CMS/DNS, API/OAuth-issuer/OIDC/SAML/account-lifecycle auth, secrets/Vault/KMS/cryptography/safe-logging, databases/BaaS/message brokers/network shares, containers/CI-CD/supply-chain/directory-services/PKI/VPN/remote-admin/native-memory safety, AI-agent/MCP boundaries, mobile/desktop local IPC, and payment/ERP state machines.
+Virgil teaches coding agents how to run structured repository security audits built on the open [Agent Skills (`SKILL.md`) specification](https://agentskills.io/specification). It pairs zero-dependency Python and PowerShell static pre-scanners (**51 deterministic rules**: `32` `[RED]`, `18` `[YELLOW]`, `1` `[OPTIONAL]`) with **165 classified semantic controls** across 8 progressive-disclosure reference guides covering web/SSR/CMS/DNS, API/OAuth-issuer/OIDC/SAML/account-lifecycle auth, secrets/Vault/KMS/cryptography/safe-logging, databases/BaaS/message brokers/network shares, containers/CI-CD/supply-chain/directory-services/PKI/VPN/remote-admin/native-memory safety, AI-agent/MCP boundaries, mobile/desktop local IPC, and payment/ERP state machines.
 
 ## Quick Install
 
