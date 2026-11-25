@@ -6,9 +6,9 @@
 
 **Portable security auditing and hardening skill for AI coding agents.**
 
-[![Version](https://img.shields.io/badge/version-1.14.0-2AB985?style=flat-square)](skills/virgil/VERSION)
+[![Version](https://img.shields.io/badge/version-1.15.0-2AB985?style=flat-square)](skills/virgil/VERSION)
 [![Spec](https://img.shields.io/badge/spec-Agent_Skills_(SKILL.md)-1F2937?style=flat-square)](https://agentskills.io/specification)
-[![Controls](https://img.shields.io/badge/controls-164_semantic_%7C_50_static_rules-1F2937?style=flat-square)](#severity-model)
+[![Controls](https://img.shields.io/badge/controls-164_semantic_%7C_51_static_rules-1F2937?style=flat-square)](#severity-model)
 [![Scanners](https://img.shields.io/badge/scanners-Python_%7C_PowerShell-1F2937?style=flat-square)](#running-a-security-audit)
 [![License](https://img.shields.io/badge/license-MIT-1F2937?style=flat-square)](LICENSE)
 
@@ -18,7 +18,7 @@
 
 ---
 
-Virgil teaches coding agents how to run structured repository security audits built on the open [Agent Skills (`SKILL.md`) specification](https://agentskills.io/specification). It pairs zero-dependency Python and PowerShell static pre-scanners (**50 deterministic rules**: `31` `[RED]`, `18` `[YELLOW]`, `1` `[OPTIONAL]`) with **164 classified semantic controls** across 8 progressive-disclosure reference guides covering web/SSR/CMS, API/OAuth-issuer/OIDC/SAML/account-lifecycle auth, secrets/cryptography/safe-logging, databases/BaaS/message brokers/network shares, containers/CI-CD/supply-chain/directory-services/native-memory safety, AI-agent/MCP boundaries, mobile/desktop local IPC, and payment/ERP state machines.
+Virgil teaches coding agents how to run structured repository security audits built on the open [Agent Skills (`SKILL.md`) specification](https://agentskills.io/specification). It pairs zero-dependency Python and PowerShell static pre-scanners (**51 deterministic rules**: `32` `[RED]`, `18` `[YELLOW]`, `1` `[OPTIONAL]`) with **164 classified semantic controls** across 8 progressive-disclosure reference guides covering web/SSR/CMS/DNS, API/OAuth-issuer/OIDC/SAML/account-lifecycle auth, secrets/Vault/KMS/cryptography/safe-logging, databases/BaaS/message brokers/network shares, containers/CI-CD/supply-chain/directory-services/PKI/VPN/remote-admin/native-memory safety, AI-agent/MCP boundaries, mobile/desktop local IPC, and payment/ERP state machines.
 
 ## Quick Install
 
@@ -158,21 +158,21 @@ Virgil/
 └── skills/
     └── virgil/
         ├── SKILL.md                           # Severity rubric, Step 0-5 audit workflow, report contract
-        ├── VERSION                            # Semantic version (1.14.0)
+        ├── VERSION                            # Semantic version (1.15.0)
         ├── assets/
         │   └── icon.svg                       # Vector skill emblem
         ├── references/
-        │   ├── web-browser.md                 # Web, SPAs, SSR/Next.js, CMS, headers, cookies, SRI, CDN mTLS, Electron
+        │   ├── web-browser.md                 # Web, SPAs, SSR/Next.js, CMS, DNS/DMARC, headers, cookies, SRI, CDN mTLS
         │   ├── api-auth.md                    # OWASP API Top 10, OAuth 2.1 client/issuer, OIDC, SAML, recovery, JWT, RBAC
-        │   ├── secrets-crypto.md              # Secrets lifecycle, tfstate, OIDC federation, AEAD/Argon2id, SafeArg logs
+        │   ├── secrets-crypto.md              # Secrets lifecycle, Vault/KMS policy, tfstate, OIDC federation, AEAD/Argon2id
         │   ├── db-storage.md                  # SQL/NoSQL injection, stored procs, RLS, Redis, Kafka/RabbitMQ, SMB/NFS/S3
-        │   ├── infra-cicd-supply.md           # Docker, K8s, cloud IAM, AD/Kerberos, GitHub Actions, SLSA, Rule of 2, C++/Java
+        │   ├── infra-cicd-supply.md           # Docker, K8s, IAM, AD/Kerberos/PKI, VPN/SSH/RDP, GitHub Actions, SLSA, Rule of 2
         │   ├── ai-agent-mcp.md                # OWASP LLM/Agentic Top 10, CaMeL, MCP auth, sandboxing, RAG, ZDR
         │   ├── mobile-apps.md                 # iOS ATS/Keychain/Enclave, Android WebViews/PendingIntents, BYOD, MASVS
         │   └── payments-business-logic.md     # Stripe/PCI-DSS v4.0, race conditions, atomic locks, ERP Segregation of Duties
         └── scripts/
-            ├── scan.py                        # Stdlib Python static pre-scanner (50 rules, parity with scan.ps1)
-            ├── scan.ps1                       # Native PowerShell static pre-scanner (50 rules, parity with scan.py)
+            ├── scan.py                        # Stdlib Python static pre-scanner (51 rules, parity with scan.ps1)
+            ├── scan.ps1                       # Native PowerShell static pre-scanner (51 rules, parity with scan.py)
             ├── check_update.py                # Read-only GitHub update check
             └── check_update.ps1               # Read-only GitHub update check (PowerShell)
 ```

@@ -255,6 +255,10 @@ RE_MYSQL_LOCAL_INFILE = re.compile(
     r"(?:\blocal[-_]infile\s*=\s*(?:1|ON|true)\b|\ballowLoadLocalInfile\s*[:=]\s*true\b|\blocalInfile\s*:\s*true\b)",
     re.IGNORECASE,
 )
+RE_REMOTE_DNS_PKI_INSECURE = re.compile(
+    r"(?:\bPermitRootLogin\s+yes\b|\bStrictHostKeyChecking(?:=|\s+)no\b|\bUserKnownHostsFile(?:=|\s+)/dev/null\b|\ballow-transfer\s*\{\s*any\s*;\s*\}|\ballow-recursion\s*\{\s*any\s*;\s*\}|\ballow-update\s*\{\s*any\s*;\s*\}|\ballow_any_name\s*[:=]\s*true\b|\bAllowUnencrypted\s*[:=]\s*['\"]?true\b|\bSecurityTypes\s*[:=]\s*['\"]?None\b)",
+    re.IGNORECASE,
+)
 
 
 @dataclass
@@ -1048,6 +1052,19 @@ def scan_file(
                 "SEC-RED-031",
                 "Insecure file-share/NFS/FTP config, GPO cpassword, or MySQL local_infile enabled",
                 "CIS Benchmarks / OWASP A02:2025 / CWE-306 / CWE-73",
+                rel_posix,
+                idx,
+                line,
+            )
+
+        if RE_REMOTE_DNS_PKI_INSECURE.search(line):
+            add_finding(
+                findings,
+                seen,
+                "RED",
+                "SEC-RED-032",
+                "Insecure SSH/WinRM/VNC remote admin, open DNS transfer/recursion/update, or wildcard PKI role",
+                "CIS Benchmarks / OWASP A02:2025 / CWE-284 / CWE-295",
                 rel_posix,
                 idx,
                 line,

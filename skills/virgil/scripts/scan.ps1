@@ -169,6 +169,7 @@ $CCppExts = [System.Collections.Generic.HashSet[string]]::new([System.StringComp
 @('.c', '.cc', '.cpp', '.cxx', '.h', '.hpp') | ForEach-Object { [void]$CCppExts.Add($_) }
 $ReShareExportInsecure = [regex]::new('(?:\bno_root_squash\b|\bserver\s+signing\s*=\s*(?:disabled|no|off)\b|\b(?:min\s+protocol|server\s+min\s+protocol|client\s+min\s+protocol)\s*=\s*(?:NT1|LANMAN[12]|CORE)\b|\bguest\s+ok\s*=\s*yes\b|\banonymous_enable\s*=\s*YES\b|\bcpassword\s*=\s*[''"][A-Za-z0-9+/=]{8,}[''"])', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
 $ReMysqlLocalInfile = [regex]::new('(?:\blocal[-_]infile\s*=\s*(?:1|ON|true)\b|\ballowLoadLocalInfile\s*[:=]\s*true\b|\blocalInfile\s*:\s*true\b)', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+$ReRemoteDnsPkiInsecure = [regex]::new('(?:\bPermitRootLogin\s+yes\b|\bStrictHostKeyChecking(?:=|\s+)no\b|\bUserKnownHostsFile(?:=|\s+)/dev/null\b|\ballow-transfer\s*\{\s*any\s*;\s*\}|\ballow-recursion\s*\{\s*any\s*;\s*\}|\ballow-update\s*\{\s*any\s*;\s*\}|\ballow_any_name\s*[:=]\s*true\b|\bAllowUnencrypted\s*[:=]\s*[''"]?true\b|\bSecurityTypes\s*[:=]\s*[''"]?None\b)', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
 
 function Mask-Token {
     param([string]$Token)
@@ -500,6 +501,9 @@ function Invoke-ScanFile {
         }
         if ($ReShareExportInsecure.IsMatch($line) -or $ReMysqlLocalInfile.IsMatch($line)) {
             Add-Finding $Findings $Seen "RED" "SEC-RED-031" "Insecure file-share/NFS/FTP config, GPO cpassword, or MySQL local_infile enabled" "CIS Benchmarks / OWASP A02:2025 / CWE-306 / CWE-73" $RelPosix $idx $line
+        }
+        if ($ReRemoteDnsPkiInsecure.IsMatch($line)) {
+            Add-Finding $Findings $Seen "RED" "SEC-RED-032" "Insecure SSH/WinRM/VNC remote admin, open DNS transfer/recursion/update, or wildcard PKI role" "CIS Benchmarks / OWASP A02:2025 / CWE-284 / CWE-295" $RelPosix $idx $line
         }
         if ($ReWeakCrypto.IsMatch($line)) {
             Add-Finding $Findings $Seen "YELLOW" "SEC-YEL-003" "Deprecated or weak cryptographic primitive" "OWASP A04:2025 / CWE-327 / CWE-328" $RelPosix $idx $line
