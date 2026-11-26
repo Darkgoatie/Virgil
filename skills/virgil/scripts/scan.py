@@ -259,6 +259,10 @@ RE_REMOTE_DNS_PKI_INSECURE = re.compile(
     r"(?:\bPermitRootLogin\s+yes\b|\bStrictHostKeyChecking(?:=|\s+)no\b|\bUserKnownHostsFile(?:=|\s+)/dev/null\b|\ballow-transfer\s*\{\s*any\s*;\s*\}|\ballow-recursion\s*\{\s*any\s*;\s*\}|\ballow-update\s*\{\s*any\s*;\s*\}|\ballow_any_name\s*[:=]\s*true\b|\bAllowUnencrypted\s*[:=]\s*['\"]?true\b|\bSecurityTypes\s*[:=]\s*['\"]?None\b|\bsnmp-server\s+community\s+(?:public|private)\b|\bno\s+service\s+password-encryption\b)",
     re.IGNORECASE,
 )
+RE_K8S_OBS_VIRT_PROXY_INSECURE = re.compile(
+    r"(?:\bsystem:(?:anonymous|unauthenticated)\b|--anonymous-auth(?:=|\s+)true\b|--authorization-mode(?:=|\s+)AlwaysAllow\b|--read-only-port(?:=|\s+)10255\b|\b(?:hostNetwork|hostPID|hostIPC)\s*:\s*true\b|\bauth_tcp\s*=\s*['\"]none['\"]|--insecure-registry\b|\bproxy_pass\s+https?://\$(?:http_host|host)\b|\b(?:GF_AUTH_ANONYMOUS_ENABLED|auth\.anonymous\.enabled)\s*[:=]\s*['\"]?true\b)",
+    re.IGNORECASE,
+)
 
 
 @dataclass
@@ -1065,6 +1069,19 @@ def scan_file(
                 "SEC-RED-032",
                 "Insecure SSH/WinRM/VNC remote admin, open DNS transfer/recursion/update, or wildcard PKI role",
                 "CIS Benchmarks / OWASP A02:2025 / CWE-284 / CWE-295",
+                rel_posix,
+                idx,
+                line,
+            )
+
+        if RE_K8S_OBS_VIRT_PROXY_INSECURE.search(line):
+            add_finding(
+                findings,
+                seen,
+                "RED",
+                "SEC-RED-033",
+                "Insecure K8s anonymous/host-namespace/kubelet setting, unauthenticated libvirt/Grafana, insecure registry, or NGINX dynamic proxy_pass SSRF",
+                "CIS Kubernetes / OWASP A02:2025 / CWE-284 / CWE-918",
                 rel_posix,
                 idx,
                 line,
