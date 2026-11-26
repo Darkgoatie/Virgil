@@ -12,13 +12,15 @@
 [![Scanners](https://img.shields.io/badge/scanners-Python_%7C_PowerShell-1F2937?style=flat-square)](#running-a-security-audit)
 [![License](https://img.shields.io/badge/license-MIT-1F2937?style=flat-square)](LICENSE)
 
-[Quick Install](#quick-install) · [Running an Audit](#running-a-security-audit) · [Severity Model](#severity-model) · [Skill Layout](#skill-layout) · [Authoritative Sources](#authoritative-standards--aaa-codebase-safety-sources) · [Agent Skills Ecosystem](#agent-skills-ecosystem) · [License & Copyright](#license-copyright--third-party-attribution-notice)
+[Quick Install](#quick-install) · [Running an Audit](#running-a-security-audit) · [Full Coverage (`COVERAGE.md`)](COVERAGE.md) · [Severity Model](#severity-model) · [Skill Layout](#skill-layout) · [Authoritative Sources](#authoritative-standards--aaa-codebase-safety-sources) · [Agent Skills Ecosystem](#agent-skills-ecosystem) · [License & Copyright](#license-copyright--third-party-attribution-notice)
 
 </div>
 
 ---
 
-Virgil teaches coding agents how to run structured repository security audits built on the open [Agent Skills (`SKILL.md`) specification](https://agentskills.io/specification). It pairs zero-dependency Python and PowerShell static pre-scanners (**52 deterministic rules**: `33` `[RED]`, `18` `[YELLOW]`, `1` `[OPTIONAL]`) with **167 classified semantic controls** across 8 progressive-disclosure reference guides covering web/SSR/CMS/DNS, API/reverse-proxy/OAuth-issuer/OIDC/SAML/account-lifecycle auth, secrets/Vault/KMS/cryptography/safe-logging, databases/BaaS/message brokers/network shares/backup platforms, containers/K8s/registries/hypervisors/CI-CD/supply-chain/directory-services/PKI/VPN/wireless/remote-admin/observability/native-memory safety, AI-agent/MCP boundaries, mobile/desktop local IPC, and payment/ERP state machines.
+Virgil is a security auditor and hardening skill for AI coding agents (Claude Code, Gemini CLI, Antigravity, Hermes, Codex CLI, and Cursor), built on the open [Agent Skills (`SKILL.md`) specification](https://agentskills.io/specification). Point your agent at any codebase and Virgil runs a fast, zero-dependency Python or PowerShell static pre-scan before walking the code and infrastructure configs through a deep semantic review—returning an actionable report split into **`[RED]`** (directly exploitable bugs and leaked secrets), **`[YELLOW]`** (defense-in-depth hardening gaps), and **`[OPTIONAL]`** (enterprise-scale recommendations).
+
+Across **219 security checks** (**52 deterministic static pre-scanner rules** and **167 semantic controls** organized into 8 on-demand domain guides), Virgil covers web frontends, SSR/Next.js, CMS platforms, and DNS; REST/GraphQL/gRPC APIs, reverse proxies, OAuth 2.1/OIDC/SAML SSO, and account lifecycle; secrets managers, HashiCorp Vault, cloud KMS, modern cryptography, and safe logging; relational/NoSQL databases, Supabase/Firebase RLS, Redis, Kafka/RabbitMQ/MQTT brokers, SMB/NFS shares, S3/GCS buckets, and backup platforms; Docker, Kubernetes, container registries, hypervisors, Active Directory/Kerberos/PKI, VPNs, enterprise Wi-Fi, Layer-2/3 network gear, SSH/RDP/WinRM remote admin, GitHub Actions CI/CD, supply chain (SLSA), SIEM/observability, and C/C++/Rust/.NET/Java memory safety; AI agents, RAG, and MCP servers; iOS/Android mobile apps and local desktop IPC; and Stripe/PCI-DSS v4.0 payment flows, race-condition locking, and ERP Segregation of Duties. See **[`COVERAGE.md`](COVERAGE.md)** for the complete rule-by-rule and domain-by-domain catalog.
 
 ## Quick Install
 
@@ -151,6 +153,7 @@ git pull; .\install.ps1 -Agent all
 
 ```text
 Virgil/
+├── COVERAGE.md                                # Complete catalog of all 219 checks (52 static + 167 semantic)
 ├── LICENSE
 ├── README.md
 ├── install.ps1
