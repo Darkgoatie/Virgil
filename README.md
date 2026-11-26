@@ -6,9 +6,9 @@
 
 **Portable security auditing and hardening skill for AI coding agents.**
 
-[![Version](https://img.shields.io/badge/version-1.16.0-2AB985?style=flat-square)](skills/virgil/VERSION)
+[![Version](https://img.shields.io/badge/version-1.17.0-2AB985?style=flat-square)](skills/virgil/VERSION)
 [![Spec](https://img.shields.io/badge/spec-Agent_Skills_(SKILL.md)-1F2937?style=flat-square)](https://agentskills.io/specification)
-[![Controls](https://img.shields.io/badge/controls-167_semantic_%7C_52_static_rules-1F2937?style=flat-square)](#severity-model)
+[![Controls](https://img.shields.io/badge/controls-167_semantic_%7C_55_static_rules-1F2937?style=flat-square)](#severity-model)
 [![Scanners](https://img.shields.io/badge/scanners-Python_%7C_PowerShell-1F2937?style=flat-square)](#running-a-security-audit)
 [![License](https://img.shields.io/badge/license-MIT-1F2937?style=flat-square)](LICENSE)
 
@@ -20,7 +20,7 @@
 
 Virgil is a security auditor and hardening skill for AI coding agents (Claude Code, Gemini CLI, Antigravity, Hermes, Codex CLI, and Cursor), built on the open [Agent Skills (`SKILL.md`) specification](https://agentskills.io/specification). Point your agent at any codebase and Virgil runs a fast, zero-dependency Python or PowerShell static pre-scan before walking the code and infrastructure configs through a deep semantic review—returning an actionable report split into **`[RED]`** (directly exploitable bugs and leaked secrets), **`[YELLOW]`** (defense-in-depth hardening gaps), and **`[OPTIONAL]`** (enterprise-scale recommendations).
 
-Across **219 security checks** (**52 deterministic static pre-scanner rules** and **167 semantic controls** organized into 8 on-demand domain guides), Virgil covers web frontends, SSR/Next.js, CMS platforms, and DNS; REST/GraphQL/gRPC APIs, reverse proxies, OAuth 2.1/OIDC/SAML SSO, and account lifecycle; secrets managers, HashiCorp Vault, cloud KMS, modern cryptography, and safe logging; relational/NoSQL databases, Supabase/Firebase RLS, Redis, Kafka/RabbitMQ/MQTT brokers, SMB/NFS shares, S3/GCS buckets, and backup platforms; Docker, Kubernetes, container registries, hypervisors, Active Directory/Kerberos/PKI, VPNs, enterprise Wi-Fi, Layer-2/3 network gear, SSH/RDP/WinRM remote admin, GitHub Actions CI/CD, supply chain (SLSA), SIEM/observability, and C/C++/Rust/.NET/Java memory safety; AI agents, RAG, and MCP servers; iOS/Android mobile apps and local desktop IPC; and Stripe/PCI-DSS v4.0 payment flows, race-condition locking, and ERP Segregation of Duties. See **[`COVERAGE.md`](COVERAGE.md)** for the complete rule-by-rule and domain-by-domain catalog.
+Across **222 security checks** (**55 deterministic static pre-scanner rules** and **167 semantic controls** organized into 8 on-demand domain guides), Virgil covers web frontends, SSR/Next.js, CMS platforms, and DNS; REST/GraphQL/gRPC APIs, reverse proxies, OAuth 2.1/OIDC/SAML SSO, and account lifecycle; secrets managers, HashiCorp Vault, cloud KMS, modern cryptography, and safe logging; relational/NoSQL databases, Supabase/Firebase RLS, Redis, Kafka/RabbitMQ/MQTT brokers, SMB/NFS shares, S3/GCS buckets, and backup platforms; Docker, Kubernetes, container registries, hypervisors, Active Directory/Kerberos/PKI, VPNs, enterprise Wi-Fi, Layer-2/3 network gear, SSH/RDP/WinRM remote admin, GitHub Actions CI/CD, supply chain (SLSA), SIEM/observability, and C/C++/Rust/.NET/Java memory safety; AI agents, RAG, and MCP servers; iOS/Android mobile apps and local desktop IPC; and Stripe/PCI-DSS v4.0 payment flows, race-condition locking, and ERP Segregation of Duties. See **[`COVERAGE.md`](COVERAGE.md)** for the complete rule-by-rule and domain-by-domain catalog.
 
 ## Quick Install
 
@@ -108,15 +108,18 @@ You can also invoke the bundled static pre-scanners directly with zero third-par
 # Python 3 (Linux / macOS / Windows)
 python3 skills/virgil/scripts/scan.py /path/to/repo
 python3 skills/virgil/scripts/scan.py /path/to/repo --format json --exit-code --include-optional
+python3 skills/virgil/scripts/scan.py /path/to/repo --format sarif --respect-gitignore
 
 # PowerShell (Windows)
 pwsh -NoProfile -File skills/virgil/scripts/scan.ps1 -Path C:\path\to\repo
 pwsh -NoProfile -File skills/virgil/scripts/scan.ps1 -Path C:\path\to\repo -Format json -ExitCode -IncludeOptional
+pwsh -NoProfile -File skills/virgil/scripts/scan.ps1 -Path C:\path\to\repo -Format sarif -RespectGitignore
 ```
 
 - **Exit codes (`--exit-code` / `-ExitCode`):** `2` if `[RED]` findings exist, `1` if only `[YELLOW]` findings exist, `0` when clean.
-- **Advisory filtering (`--include-optional` / `-IncludeOptional`):** Prints `[OPTIONAL]` recommendations under a separate heading without affecting vulnerability counts or non-zero exit codes.
-- **Secret redaction:** Matched credentials are always masked (`sk_l****abcd`) in both text and JSON output.
+- **Output formats (`--format` / `-Format`):** `markdown` (default), `json`, or `sarif` (SARIF 2.1.0 for GitHub Code Scanning).
+- **Filtering & suppressions:** `--respect-gitignore` (`-RespectGitignore`) skips root `.gitignore` paths; inline `virgil-ignore: <RULE-ID>` comments suppress verified false positives per line; `--include-optional` (`-IncludeOptional`) prints `[OPTIONAL]` recommendations under a separate heading without affecting vulnerability counts or non-zero exit codes.
+- **Secret redaction:** Matched credentials, sensitive key-value assignments, and card PANs are always masked (`sk_l****abcd`) in Markdown, JSON, and SARIF output.
 
 ### Checking for Updates
 
@@ -153,15 +156,17 @@ git pull; .\install.ps1 -Agent all
 
 ```text
 Virgil/
-├── COVERAGE.md                                # Complete catalog of all 219 checks (52 static + 167 semantic)
+├── COVERAGE.md                                # Complete catalog of all 222 checks (55 static + 167 semantic)
 ├── LICENSE
 ├── README.md
 ├── install.ps1
 ├── install.sh
+├── tests/
+│   └── test_scanners.py                       # Regression and Python/PowerShell parity test suite
 └── skills/
     └── virgil/
         ├── SKILL.md                           # Severity rubric, Step 0-5 audit workflow, report contract
-        ├── VERSION                            # Semantic version (1.16.0)
+        ├── VERSION                            # Semantic version (1.17.0)
         ├── assets/
         │   └── icon.svg                       # Vector skill emblem
         ├── references/
@@ -174,8 +179,8 @@ Virgil/
         │   ├── mobile-apps.md                 # iOS ATS/Keychain/Enclave, Android WebViews/PendingIntents, BYOD, MASVS
         │   └── payments-business-logic.md     # Stripe/PCI-DSS v4.0, race conditions, atomic locks, ERP Segregation of Duties
         └── scripts/
-            ├── scan.py                        # Stdlib Python static pre-scanner (52 rules, parity with scan.ps1)
-            ├── scan.ps1                       # Native PowerShell static pre-scanner (52 rules, parity with scan.py)
+            ├── scan.py                        # Stdlib Python static pre-scanner (55 rules, parity with scan.ps1)
+            ├── scan.ps1                       # Native PowerShell static pre-scanner (55 rules, parity with scan.py)
             ├── check_update.py                # Read-only GitHub update check
             └── check_update.ps1               # Read-only GitHub update check (PowerShell)
 ```

@@ -66,7 +66,7 @@ python3 scripts/scan.py <target-repo>
 pwsh -NoProfile -File scripts/scan.ps1 -Path <target-repo>
 ```
 
-Use `--format json` (`-Format json`) for structured parsing, and `--include-optional` (`-IncludeOptional`) if you want advisory `[OPTIONAL]` items listed separately. Also run repo-native tools already available in the environment (`gitleaks`, `semgrep`, `npm audit`, `actionlint`, `pip-audit`) when present. Report only checks actually executed.
+Use `--format json` (`-Format json`) for structured parsing, `--format sarif` (`-Format sarif`) for SARIF 2.1.0 CI uploads, `--respect-gitignore` (`-RespectGitignore`) to skip root `.gitignore` paths, and `--include-optional` (`-IncludeOptional`) if you want advisory `[OPTIONAL]` items listed separately. Also run repo-native tools already available in the environment (`gitleaks`, `semgrep`, `npm audit`, `actionlint`, `pip-audit`) when present. Report only checks actually executed.
 
 ### Step 3: Load Only Matching Domain References
 Read the `references/*.md` files corresponding to technologies detected in Step 1:

@@ -53,6 +53,10 @@ try {
         "User-Agent" = $UserAgent
         "Accept"     = "application/vnd.github+json"
     }
+    $ghToken = if ($env:GITHUB_TOKEN) { $env:GITHUB_TOKEN } elseif ($env:GH_TOKEN) { $env:GH_TOKEN } else { "" }
+    if ($ghToken) {
+        $headers["Authorization"] = "Bearer $ghToken"
+    }
     $commitResp = Invoke-RestMethod -Uri $CommitApiUrl -Headers $headers -TimeoutSec $TimeoutSec -Method Get
     $RemoteSha = "$($commitResp.sha)".Trim()
     if (-not $RemoteSha) {
@@ -74,8 +78,23 @@ try {
             $Status = "up_to_date"
             $Message = "[UP TO DATE] virgil v$LocalVer ($ShortLocal) matches $Repo@$Branch."
         } else {
-            $Status = "update_available"
-            $Message = "[UPDATE AVAILABLE] virgil local=v$LocalVer ($ShortLocal) vs remote=v$RemoteVer ($ShortRemote). Update from the Virgil clone with: git pull && .\install.ps1 (or ./install.sh)"
+            $isAhead = $false
+            try {
+                $gitCmd = Get-Command git -ErrorAction SilentlyContinue
+                if ($gitCmd) {
+                    & git -C $SkillDir merge-base --is-ancestor $RemoteSha HEAD 2>$null
+                    if ($LASTEXITCODE -eq 0) { $isAhead = $true }
+                }
+            } catch {
+                $isAhead = $false
+            }
+            if ($isAhead) {
+                $Status = "ahead"
+                $Message = "[AHEAD] virgil local=v$LocalVer ($ShortLocal) is ahead of $Repo@$Branch ($ShortRemote)."
+            } else {
+                $Status = "update_available"
+                $Message = "[UPDATE AVAILABLE] virgil local=v$LocalVer ($ShortLocal) vs remote=v$RemoteVer ($ShortRemote). Update from the Virgil clone with: git pull && .\install.ps1 (or ./install.sh)"
+            }
         }
     } elseif ($RemoteVer -ne "unknown" -and $LocalVer -ne $RemoteVer) {
         $Status = "update_available"

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import urllib.error
 import urllib.request
@@ -51,15 +52,30 @@ def read_local_commit(skill_dir: Path) -> str:
 
 
 def fetch_text(url: str, accept: str = "text/plain") -> str:
-    req = urllib.request.Request(
-        url,
-        headers={
-            "User-Agent": USER_AGENT,
-            "Accept": accept,
-        },
-    )
+    headers = {
+        "User-Agent": USER_AGENT,
+        "Accept": accept,
+    }
+    token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    if token and url.startswith("https://api.github.com/"):
+        headers["Authorization"] = f"Bearer {token}"
+    req = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(req, timeout=TIMEOUT_SEC) as resp:
         return resp.read().decode("utf-8", errors="replace")
+
+
+def is_local_ahead(skill_dir: Path, remote_sha: str) -> bool:
+    try:
+        res = subprocess.run(
+            ["git", "-C", str(skill_dir), "merge-base", "--is-ancestor", remote_sha, "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+            check=False,
+        )
+        return res.returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
 
 
 def check_remote() -> tuple[str, str, str]:
@@ -102,6 +118,9 @@ def main() -> int:
             if local_sha == remote_sha:
                 status = "up_to_date"
                 message = f"[UP TO DATE] virgil v{local_ver} ({short_local}) matches {REPO}@{BRANCH}."
+            elif is_local_ahead(skill_dir, remote_sha):
+                status = "ahead"
+                message = f"[AHEAD] virgil local=v{local_ver} ({short_local}) is ahead of {REPO}@{BRANCH} ({short_remote})."
             else:
                 status = "update_available"
                 message = (

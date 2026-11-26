@@ -1,4 +1,4 @@
-# Virgil Security Coverage Catalog (`v1.16.0`)
+# Virgil Security Coverage Catalog (`v1.17.0`)
 
 This document inventories every static pre-scanner rule and semantic security control enforced by the `virgil` skill (`skills/virgil/`).
 
@@ -8,7 +8,7 @@ This document inventories every static pre-scanner rule and semantic security co
 
 | Category | Reference / Script | `[RED]` | `[YELLOW]` | `[OPTIONAL]` | Total |
 |---|---|---:|---:|---:|---:|
-| **Static Pre-Scanner Rules** | [`skills/virgil/scripts/scan.py`](skills/virgil/scripts/scan.py) & [`scan.ps1`](skills/virgil/scripts/scan.ps1) | 33 | 18 | 1 | **52** |
+| **Static Pre-Scanner Rules** | [`skills/virgil/scripts/scan.py`](skills/virgil/scripts/scan.py) & [`scan.ps1`](skills/virgil/scripts/scan.ps1) | 36 | 18 | 1 | **55** |
 | **Web, Frontend, Browser, CMS & DNS** | [`skills/virgil/references/web-browser.md`](skills/virgil/references/web-browser.md) | 23 | 9 | 2 | **34** |
 | **API, Proxies, OAuth/OIDC/SAML & IAM** | [`skills/virgil/references/api-auth.md`](skills/virgil/references/api-auth.md) | 21 | 11 | 1 | **33** |
 | **Databases, Caches, Brokers, Shares & Backups** | [`skills/virgil/references/db-storage.md`](skills/virgil/references/db-storage.md) | 17 | 6 | 0 | **23** |
@@ -17,15 +17,15 @@ This document inventories every static pre-scanner rule and semantic security co
 | **Mobile Apps & Desktop Local IPC** | [`skills/virgil/references/mobile-apps.md`](skills/virgil/references/mobile-apps.md) | 10 | 3 | 2 | **15** |
 | **AI Agents, LLMs & MCP Servers** | [`skills/virgil/references/ai-agent-mcp.md`](skills/virgil/references/ai-agent-mcp.md) | 10 | 4 | 0 | **14** |
 | **Payments, PCI-DSS v4.0, Concurrency & ERP** | [`skills/virgil/references/payments-business-logic.md`](skills/virgil/references/payments-business-logic.md) | 6 | 3 | 1 | **10** |
-| **Total Checks** | **8 Domain Guides + 2 Parity Pre-Scanners** | **143** | **65** | **11** | **219** |
+| **Total Checks** | **8 Domain Guides + 2 Parity Pre-Scanners** | **146** | **65** | **11** | **222** |
 
 ---
 
-## Part 1: Deterministic Static Pre-Scanner Rules (`52` Rules)
+## Part 1: Deterministic Static Pre-Scanner Rules (`55` Rules)
 
-`scan.py` and `scan.ps1` execute with zero external dependencies and maintain 100% rule-ID and finding parity.
+`scan.py` and `scan.ps1` execute with zero external dependencies and maintain 100% rule-ID and finding parity (verified by `tests/test_scanners.py`).
 
-### `[RED]` Static Rules (`33` Rules: `SEC-RED-001` – `SEC-RED-033`)
+### `[RED]` Static Rules (`36` Rules: `SEC-RED-001` – `SEC-RED-036`)
 
 | Rule ID | Title | Standard / CWE | What It Detects |
 |---|---|---|---|
@@ -61,7 +61,10 @@ This document inventories every static pre-scanner rule and semantic security co
 | `SEC-RED-030` | Unbounded C string/buffer function susceptible to buffer overflow | NASA JPL / OpenSSF / Apple / CWE-120 | `gets()`, `strcpy()`, `strcat()`, `sprintf()`, or `vsprintf()` in C/C++ source and headers. |
 | `SEC-RED-031` | Insecure file-share/NFS/FTP config, GPO `cpassword`, or MySQL `local_infile` enabled | CIS Benchmarks / OWASP A02:2025 / CWE-306 / CWE-73 | NFS `no_root_squash`, SMB `server signing = disabled`, `min protocol = NT1/LANMAN`, `guest ok = yes`, FTP `anonymous_enable=YES`, Group Policy `cpassword`, or MySQL `local_infile=1` / `allowLoadLocalInfile=true`. |
 | `SEC-RED-032` | Insecure SSH/WinRM/VNC/SNMP remote admin, open DNS transfer/recursion/update, or wildcard PKI role | CIS Benchmarks / OWASP A02:2025 / CWE-284 / CWE-295 | `PermitRootLogin yes`, `StrictHostKeyChecking=no`, `UserKnownHostsFile=/dev/null`, WinRM `AllowUnencrypted=true`, VNC `SecurityTypes=None`, `snmp-server community public\|private`, `no service password-encryption`, DNS `allow-transfer/recursion/update { any; };`, or Vault PKI `allow_any_name: true`. |
-| `SEC-RED-033` | Insecure K8s anonymous/host-namespace/kubelet setting, unauthenticated libvirt/Grafana, insecure registry, or NGINX dynamic `proxy_pass` SSRF | CIS Kubernetes / OWASP A02:2025 / CWE-284 / CWE-918 | K8s `system:anonymous`/`system:unauthenticated`, Kubelet `--anonymous-auth=true`/`--authorization-mode=AlwaysAllow`/`--read-only-port=10255`, `hostNetwork`/`hostPID`/`hostIPC: true`, libvirt `auth_tcp="none"`, `--insecure-registry`, NGINX `proxy_pass http://$http_host`, or Grafana `GF_AUTH_ANONYMOUS_ENABLED=true`. |
+| `SEC-RED-033` | Insecure K8s anonymous/host-namespace/kubelet setting, unauthenticated libvirt/Grafana, insecure registry, or NGINX dynamic `proxy_pass` SSRF | CIS Kubernetes / OWASP A02:2025 / CWE-284 / CWE-918 | K8s `system:anonymous`/`system:unauthenticated`, Kubelet `--anonymous-auth=true`/`--authorization-mode=AlwaysAllow`/`--read-only-port=10255`, `hostNetwork`/`hostPID`/`hostIPC`/`allowPrivilegeEscalation: true`, `hostPath:`, libvirt `auth_tcp="none"`, `--insecure-registry`, NGINX `proxy_pass http://$http_host`, or Grafana `GF_AUTH_ANONYMOUS_ENABLED=true`. |
+| `SEC-RED-034` | AI agent sandbox/permission bypass flag or hardcoded MCP config secret | OWASP ASI02 / ASI05 / CWE-250 / CWE-798 | `--dangerously-skip-permissions`, `--dangerously-bypass-approvals-and-sandbox`, or hardcoded `API_KEY`/`SECRET`/`TOKEN`/`PASSWORD` values inside `mcp.json`, `.mcp.json`, or `claude_desktop_config.json`. |
+| `SEC-RED-035` | Cloud IMDSv1 enabled, public object storage ACL, or wildcard IAM policy | CIS Cloud Benchmarks / OWASP A02:2025 / CWE-918 / CWE-284 | `http_tokens = "optional"` / `HttpTokens: optional` (IMDSv1), `acl = "public-read"` / `"public-read-write"`, `block_public_acls = false`, `AllowBlobPublicAccess = true`, `allUsers`/`allAuthenticatedUsers`, or IAM `"Action": "*"` paired with `"Resource": "*"`. |
+| `SEC-RED-036` | Legacy OAuth Implicit/ROPC grant or plain PKCE downgrade | OAuth 2.1 / IETF RFC 9700 / CWE-287 | `response_type=token`, `grant_type=password`, or `code_challenge_method=plain` in application code or configs. |
 
 ### `[YELLOW]` Static Rules (`18` Rules: `SEC-YEL-001` – `SEC-YEL-018`)
 
